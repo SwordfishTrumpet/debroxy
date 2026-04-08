@@ -50,6 +50,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
       mediaSrc: ["'self'", 'https:'],
@@ -157,8 +159,8 @@ const authMiddleware = config.authEnabled ? [tokenAuth] : [];
 
 // Register routes
 registerStremioRoutes(app, { prefix, authMiddleware, createTimeoutMiddleware });
-registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware: (ms) => createTimeoutMiddleware(ms || STREAM_TIMEOUT_MS) });
-registerSystemRoutes(app, { healthLimiter, tokenAuth });
+registerApiRoutes(app, { prefix, tokenAuth, createTimeoutMiddleware: (ms) => createTimeoutMiddleware(ms || STREAM_TIMEOUT_MS) });
+registerSystemRoutes(app, { prefix, healthLimiter, tokenAuth });
 
 // 404 handler
 app.use((req, res) => {

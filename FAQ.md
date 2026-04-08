@@ -82,6 +82,9 @@ Comprehensive technical documentation for Debroxy.
 | `SYNC_INTERVAL_MIN` | | `15` | How often to sync with Real-Debrid (minutes) |
 | `LOG_LEVEL` | | `info` | Logging verbosity: `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
 | `MIN_STREAM_QUALITY` | | — | Minimum stream quality to show: `2160p`, `1440p`, `1080p`, `720p`, `480p`, `360p` |
+| `TRANSCODING_ENABLED` | | `true` | Enable Real-Debrid HLS transcoding for better compatibility |
+| `TRANSCODING_CACHE_TTL` | | `3600` | Cache transcoding URLs (seconds) |
+| `WATCH_COMPLETION_THRESHOLD` | | `0.90` | Percentage (0.5-0.99) at which items are marked completed |
 | `TRUSTED_PROXIES` | | `127.0.0.1,::1` | Comma-separated IPs of trusted reverse proxies (for correct client IP detection) |
 | `ENABLE_METRICS` | | `true` | Enable Prometheus metrics endpoint (`/:token/metrics`) |
 | `NODE_ENV` | | — | Set to `production` for HTTPS enforcement and security hardening |

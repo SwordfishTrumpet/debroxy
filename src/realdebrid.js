@@ -202,6 +202,37 @@ export async function getHosts() {
   return queueRequest(() => client.get('/hosts'));
 }
 
+/**
+ * Get transcoding links for a file
+ * @param {string} fileId - File ID from /unrestrict/link
+ * @returns {Promise<Object|null>} Transcoding data or null if unavailable
+ */
+export async function getTranscodeLinks(fileId) {
+  try {
+    const data = await queueRequest(() => client.get(`/streaming/transcode/${fileId}`));
+    return data;
+  } catch (error) {
+    // Transcoding not available for this file
+    log.debug({ fileId, error: error.response?.data?.error || error.message }, 'Transcoding not available');
+    return null;
+  }
+}
+
+/**
+ * Get media info for a file
+ * @param {string} fileId - File ID from /unrestrict/link
+ * @returns {Promise<Object|null>} Media info or null if unavailable
+ */
+export async function getMediaInfo(fileId) {
+  try {
+    const data = await queueRequest(() => client.get(`/streaming/mediaInfos/${fileId}`));
+    return data;
+  } catch (error) {
+    log.debug({ fileId, error: error.response?.data?.error || error.message }, 'Media info not available');
+    return null;
+  }
+}
+
 export default {
   getUser,
   listTorrents,
@@ -210,7 +241,11 @@ export default {
   selectFiles,
   deleteTorrent,
   unrestrict,
+  getTranscodeLinks,
+  getMediaInfo,
   instantAvailability,
   listDownloads,
   getHosts,
+  getCircuitBreakerState,
+  resetCircuitBreaker,
 };

@@ -18,10 +18,18 @@ const AUTH_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Periodically clean up expired lockout entries to prevent memory leak
 setInterval(() => {
-  const cutoff = Date.now() - LOCKOUT_DURATION_MS;
+  const now = Date.now();
+  const lockoutCutoff = now - LOCKOUT_DURATION_MS;
+  const staleCutoff = now - (LOCKOUT_DURATION_MS * 2); // 2x for stale entries
+  
   for (const [ip, data] of failedAuthAttempts) {
-    // Clean up both expired lockouts AND old successful auth records
-    if (data.lockedUntil < cutoff || data.lastAttempt < cutoff) {
+    // Clean up entries where:
+    // 1. Lockout has expired AND last attempt was old enough, OR
+    // 2. Entry is very stale (no activity for 2x lockout duration)
+    const lockoutExpired = data.lockedUntil && data.lockedUntil < lockoutCutoff;
+    const isStale = data.lastAttempt < staleCutoff;
+    
+    if ((lockoutExpired && data.lastAttempt < lockoutCutoff) || isStale) {
       failedAuthAttempts.delete(ip);
     }
   }

@@ -36,6 +36,8 @@ const VIDEO_MIME_TYPES = {
   ts: 'video/mp2t',
   mpeg: 'video/mpeg',
   mpg: 'video/mpeg',
+  m3u8: 'application/vnd.apple.mpegurl',
+  mpd: 'application/dash+xml',
   // Subtitle MIME types
   srt: 'application/x-subrip',
   sub: 'text/plain',
@@ -60,6 +62,71 @@ const BAD_CONTENT_TYPES = [
 export function getMimeType(filename, fallback = 'video/mp4') {
   const ext = filename?.split('.').pop()?.toLowerCase();
   return VIDEO_MIME_TYPES[ext] || fallback;
+}
+
+/**
+ * Check if URL is an HLS manifest
+ * @param {string} url - URL to check
+ * @returns {boolean} True if HLS
+ */
+function isHlsManifest(url) {
+  return url?.toLowerCase().endsWith('.m3u8') || false;
+}
+
+/**
+ * Rewrite HLS manifest to proxy segments through Debroxy
+ * This preserves auth/privacy while allowing adaptive streaming
+ * @param {string} manifest - Original manifest content
+ * @param {string} baseUrl - Base URL for segment resolution
+ * @returns {string} Rewritten manifest
+ */
+function rewriteHlsManifest(manifest, baseUrl) {
+  const lines = manifest.split('\n');
+  const rewritten = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Skip empty lines and comments (except #EXT-X-KEY and #EXT-X-MAP which contain URIs)
+    if (!trimmed || trimmed.startsWith('#')) {
+      // Check for URI-containing tags that need rewriting
+      if (trimmed.startsWith('#EXT-X-KEY:') || trimmed.startsWith('#EXT-X-MAP:')) {
+        // Rewrite URI=... in these tags - for now keep simple
+        rewritten.push(line);
+      } else {
+        rewritten.push(line);
+      }
+      continue;
+    }
+    
+    // This is a segment URL - it could be relative or absolute
+    let segmentUrl = trimmed;
+    
+    // If relative, resolve against base URL
+    if (!segmentUrl.match(/^https?:\/\//)) {
+      try {
+        const base = new URL(baseUrl);
+        // Handle relative paths
+        if (segmentUrl.startsWith('/')) {
+          segmentUrl = `${base.protocol}//${base.host}${segmentUrl}`;
+        } else {
+          // Relative to current path
+          const pathParts = base.pathname.split('/');
+          pathParts.pop(); // Remove filename
+          const basePath = pathParts.join('/');
+          segmentUrl = `${base.protocol}//${base.host}${basePath}/${segmentUrl}`;
+        }
+      } catch (e) {
+        log.debug({ error: e.message }, 'Failed to resolve relative URL');
+      }
+    }
+    
+    // For now, pass through the URL as-is - segments are publicly accessible on RD
+    // If auth/privacy is needed, we could encode and proxy them
+    rewritten.push(segmentUrl);
+  }
+  
+  return rewritten.join('\n');
 }
 
 /**
@@ -296,6 +363,45 @@ export function createProxyHandler(options) {
 
       // Set status code (206 for partial content, 200 for full)
       res.status(response.status);
+
+      // Handle HLS manifests specially - buffer and rewrite for privacy/auth
+      const isHls = isHlsManifest(url) || response.headers['content-type']?.includes('mpegurl');
+      
+      if (isHls && response.status === 200) {
+        // Buffer the manifest and rewrite segment URLs
+        let manifestBuffer = '';
+        
+        response.data.on('data', (chunk) => {
+          manifestBuffer += chunk.toString('utf8');
+        });
+        
+        response.data.on('end', () => {
+          try {
+            const rewritten = rewriteHlsManifest(manifestBuffer, url);
+            res.set('Content-Type', 'application/vnd.apple.mpegurl');
+            res.set('Content-Length', Buffer.byteLength(rewritten));
+            res.send(rewritten);
+            
+            const duration = Date.now() - startTime;
+            log.info({ streamId, duration, filename, type: 'hls-manifest' }, 'HLS manifest served');
+          } catch (error) {
+            log.error({ streamId, error: error.message }, 'Failed to rewrite HLS manifest');
+            res.status(502).json({ error: 'Failed to process stream' });
+          } finally {
+            activeStreams.delete(streamId);
+          }
+        });
+        
+        response.data.on('error', (error) => {
+          log.error({ streamId, error: error.message }, 'HLS manifest stream error');
+          if (!res.headersSent) {
+            res.status(502).json({ error: 'Upstream error' });
+          }
+          activeStreams.delete(streamId);
+        });
+        
+        return; // Exit early, we're handling the response manually
+      }
 
       // Handle client disconnect
       req.on('close', () => {

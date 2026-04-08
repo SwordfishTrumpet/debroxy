@@ -197,6 +197,13 @@ CREATE INDEX IF NOT EXISTS idx_sync_state_key ON sync_state(key);
 CREATE INDEX IF NOT EXISTS idx_watch_history_imdb ON watch_history(imdb_id);
 CREATE INDEX IF NOT EXISTS idx_watch_history_last_watched ON watch_history(last_watched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_watch_history_continue ON watch_history(is_completed, last_watched_at DESC);
+
+-- Low bandwidth mode table: stores per-client preference for forcing 480p transcoding
+CREATE TABLE IF NOT EXISTS low_bandwidth_mode (
+    client_ip TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
 `;
 
 // Initialize schema
@@ -310,6 +317,9 @@ const statements = {
     AND (@year_max IS NULL OR t.year <= @year_max)
     GROUP BY t.imdb_id
     ORDER BY
+      CASE WHEN @search_exact IS NOT NULL THEN
+        CASE WHEN LOWER(t.name) = LOWER(@search_exact) THEN 0 ELSE 1
+      END END ASC,
       CASE @sort
         WHEN 'year_desc' THEN COALESCE(t.year, 0) * -1
         WHEN 'year_asc' THEN COALESCE(t.year, 9999)
@@ -456,6 +466,17 @@ const statements = {
   deleteWatchProgress: db.prepare('DELETE FROM watch_history WHERE imdb_id = @imdb_id AND season IS @season AND episode IS @episode'),
 
   getImdbIdByRdId: db.prepare('SELECT imdb_id FROM torrents WHERE rd_id = ?'),
+
+  // Low bandwidth mode statements
+  getLowBandwidthMode: db.prepare('SELECT enabled FROM low_bandwidth_mode WHERE client_ip = ?'),
+  setLowBandwidthMode: db.prepare(`
+    INSERT INTO low_bandwidth_mode (client_ip, enabled, updated_at)
+    VALUES (@client_ip, @enabled, @updated_at)
+    ON CONFLICT(client_ip) DO UPDATE SET
+      enabled = excluded.enabled,
+      updated_at = excluded.updated_at
+  `),
+  getAllLowBandwidthModes: db.prepare('SELECT * FROM low_bandwidth_mode WHERE enabled = 1'),
 };
 
 /**
@@ -639,9 +660,13 @@ export function getCatalog(type, options = {}) {
   } = options;
   
   const searchPattern = sanitizeSearch(search);
+  // For exact match prioritization, pass the original search term (trimmed)
+  const searchExact = search ? search.trim() : null;
+  
   return statements.getCatalog.all({
     type,
     search: searchPattern,
+    search_exact: searchExact,
     genre,
     year_min: yearMin,
     year_max: yearMax,
@@ -932,6 +957,30 @@ export function getImdbIdByRdId(rdId) {
  */
 export function deleteWatchProgress(imdbId, season = null, episode = null) {
   return statements.deleteWatchProgress.run({ imdb_id: imdbId, season, episode });
+}
+
+/**
+ * Get low bandwidth mode for a client IP
+ * @param {string} clientIp - Client IP address
+ * @returns {boolean} True if low bandwidth mode is enabled
+ */
+export function getLowBandwidthMode(clientIp) {
+  const row = statements.getLowBandwidthMode.get(clientIp);
+  return row ? row.enabled === 1 : false;
+}
+
+/**
+ * Set low bandwidth mode for a client IP
+ * @param {string} clientIp - Client IP address
+ * @param {boolean} enabled - Whether to enable low bandwidth mode
+ */
+export function setLowBandwidthMode(clientIp, enabled) {
+  statements.setLowBandwidthMode.run({
+    client_ip: clientIp,
+    enabled: enabled ? 1 : 0,
+    updated_at: Date.now(),
+  });
+  log.info({ clientIp, enabled }, 'Low bandwidth mode ' + (enabled ? 'enabled' : 'disabled'));
 }
 
 /**

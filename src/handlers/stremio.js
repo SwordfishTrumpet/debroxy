@@ -7,6 +7,7 @@ import * as stremio from '../stremio.js';
 import * as proxy from '../proxy.js';
 import config from '../config.js';
 import * as library from '../library.js';
+import * as db from '../db.js';
 import { validateStreamInfo, parseExtraParams } from '../validators.js';
 import { ErrorCode, createErrorResponse } from '../errors.js';
 import { noCache } from '../middleware.js';
@@ -81,7 +82,7 @@ export async function streamPlayHandler(req, res) {
     return res.status(400).json(createErrorResponse(400, validation.error, ErrorCode.VALIDATION_ERROR));
   }
 
-  const urlInfo = await stremio.getStreamUrl(streamInfo);
+  const urlInfo = await stremio.getStreamUrl(streamInfo, req.ip);
   const handler = proxy.createProxyHandler(urlInfo);
   await handler(req, res);
 }
@@ -133,6 +134,9 @@ export function configureHandler(req, res) {
     ? `${config.externalUrl}/${token}`
     : config.externalUrl;
 
+  // Get low bandwidth mode for this client
+  const lowBandwidthMode = db.getLowBandwidthMode(req.ip);
+
   const html = generateConfigurePage({
     library: library.getStatus(),
     streams: {
@@ -141,6 +145,7 @@ export function configureHandler(req, res) {
     },
     token: token,
     apiBase: apiBase,
+    lowBandwidthMode: lowBandwidthMode,
   });
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

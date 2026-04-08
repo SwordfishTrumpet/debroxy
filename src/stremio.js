@@ -776,11 +776,12 @@ export async function handleStream(type, id, token) {
         result.push(streamEntry);
       }
     } else {
-      // Single file or movie
+      // Single file or movie - filesize may be null if not in torrent_files
+      // We use undefined to indicate size is unknown (will be fetched at play time)
       const streamEntry = createStreamEntry({
         rdId,
         filename: torrent.filename,
-        filesize: torrent.filesize,
+        filesize: null, // Single-file torrents don't have filesize stored
         urlPrefix,
         torrent,
         score: data.score,
@@ -837,9 +838,10 @@ export function decodeStreamInfo(encoded) {
 /**
  * Get unrestricted download URL for a stream
  * @param {Object} streamInfo - Decoded stream info
+ * @param {string} [clientIp] - Client IP for low bandwidth mode check
  * @returns {Promise<Object>} { url, filename, size }
  */
-export async function getStreamUrl(streamInfo) {
+export async function getStreamUrl(streamInfo, clientIp) {
   // Validate RD ID format
   if (!streamInfo?.rdId || !validateRdId(streamInfo.rdId)) {
     throw Object.assign(new Error('Invalid RD torrent ID'), { 
@@ -889,16 +891,65 @@ export async function getStreamUrl(streamInfo) {
   // Unrestrict the link
   const unrestricted = await rd.unrestrict(link);
 
+  // Check for transcoding (HLS) availability - much better for Stremio
+  let streamUrl = unrestricted.download;
+  let mimeType = unrestricted.mimeType;
+  let isTranscoded = false;
+  let transcodeData = null;
+
+  // Check if low bandwidth mode is enabled for this client
+  const lowBandwidthMode = clientIp ? db.getLowBandwidthMode(clientIp) : false;
+
+  // Only check transcoding if enabled in config
+  if (config.transcodingEnabled) {
+    try {
+      transcodeData = await rd.getTranscodeLinks(unrestricted.id);
+      const apple = transcodeData?.apple;
+
+      if (apple) {
+        // If low bandwidth mode is enabled, prefer 480p
+        if (lowBandwidthMode && apple['480p']) {
+          streamUrl = apple['480p'];
+          mimeType = 'application/vnd.apple.mpegurl';
+          isTranscoded = true;
+          log.info({
+            cacheKey,
+            clientIp,
+            filename: unrestricted.filename,
+            quality: '480p',
+          }, 'Low bandwidth mode: using 480p transcoding');
+        } else if (apple.full) {
+          // Use HLS transcoding - much more compatible with Stremio
+          streamUrl = apple.full;
+          mimeType = 'application/vnd.apple.mpegurl';
+          isTranscoded = true;
+          log.debug({
+            cacheKey,
+            filename: unrestricted.filename,
+            hasDash: !!transcodeData.dash?.full,
+            hasMp4: !!transcodeData.liveMP4?.full,
+          }, 'Using HLS transcoding');
+        }
+      }
+    } catch (error) {
+      // Transcoding not available, use original
+      log.debug({ cacheKey, error: error.message }, 'Transcoding check failed, using original');
+    }
+  }
+
   const result = {
-    url: unrestricted.download,
+    url: streamUrl,
     filename: unrestricted.filename,
     size: unrestricted.filesize,
-    mimeType: unrestricted.mimeType,
+    mimeType: mimeType,
+    isTranscoded,
+    transcodeData,
+    rdFileId: unrestricted.id,
   };
 
   // Cache the result
   urlCache.set(cacheKey, result);
-  log.debug({ cacheKey, filename: result.filename }, 'URL unrestricted and cached');
+  log.debug({ cacheKey, filename: result.filename, isTranscoded }, 'URL prepared and cached');
 
   return result;
 }

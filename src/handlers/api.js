@@ -301,3 +301,19 @@ export function markCompleteHandler(req, res) {
 
   res.json({ status: 'ok' });
 }
+
+/**
+ * Toggle low bandwidth mode handler
+ * Enables/disables 480p transcoding for slower connections
+ */
+export function toggleBandwidthModeHandler(req, res) {
+  const clientIp = req.ip;
+  const enabled = req.body?.enabled === true;
+
+  db.setLowBandwidthMode(clientIp, enabled);
+
+  res.json({
+    enabled,
+    message: enabled ? 'Low bandwidth mode enabled (480p transcoding)' : 'Low bandwidth mode disabled (full quality)',
+  });
+}

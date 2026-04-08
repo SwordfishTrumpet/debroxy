@@ -25,6 +25,7 @@ import {
   getHistoryHandler,
   getHistoryStatsHandler,
   markCompleteHandler,
+  toggleBandwidthModeHandler,
 } from '../handlers/api.js';
 
 /**
@@ -33,60 +34,67 @@ import {
  * @param {Object} options - Route options
  * @param {Function} options.tokenAuth - Token auth middleware
  * @param {Function} options.createTimeoutMiddleware - Timeout middleware factory
+ * @param {string} options.prefix - Route prefix (empty string or '/:token')
  */
-export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware }) {
+export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware, prefix = '/:token' }) {
+  const p = prefix; // shorthand
+  const auth = tokenAuth;
+
   // RD user info
-  app.get('/:token/api/user', tokenAuth, asyncHandler(getUserHandler));
+  app.get(`${p}/api/user`, auth, asyncHandler(getUserHandler));
 
   // List RD torrents
-  app.get('/:token/api/torrents', tokenAuth, asyncHandler(listTorrentsHandler));
+  app.get(`${p}/api/torrents`, auth, asyncHandler(listTorrentsHandler));
 
   // Get torrent details
-  app.get('/:token/api/torrents/:id', tokenAuth, asyncHandler(getTorrentHandler));
+  app.get(`${p}/api/torrents/:id`, auth, asyncHandler(getTorrentHandler));
 
   // Add magnet
-  app.post('/:token/api/magnet', tokenAuth, asyncHandler(addMagnetHandler));
+  app.post(`${p}/api/magnet`, auth, asyncHandler(addMagnetHandler));
 
   // Unrestrict link
-  app.post('/:token/api/unrestrict', tokenAuth, asyncHandler(unrestrictHandler));
+  app.post(`${p}/api/unrestrict`, auth, asyncHandler(unrestrictHandler));
 
   // List downloads
-  app.get('/:token/api/downloads', tokenAuth, asyncHandler(listDownloadsHandler));
+  app.get(`${p}/api/downloads`, auth, asyncHandler(listDownloadsHandler));
 
   // Proxy stream status
-  app.get('/:token/api/streams', tokenAuth, getStreamsHandler);
+  app.get(`${p}/api/streams`, auth, getStreamsHandler);
 
   // Generic URL proxy (for direct RD URLs) - with extended timeout for streaming
-  app.options('/:token/proxy/stream', tokenAuth, proxy.handlePreflight);
-  app.get('/:token/proxy/stream', tokenAuth, createTimeoutMiddleware(STREAM_TIMEOUT_MS), asyncHandler(proxyStreamHandler));
+  app.options(`${p}/proxy/stream`, auth, proxy.handlePreflight);
+  app.get(`${p}/proxy/stream`, auth, createTimeoutMiddleware(STREAM_TIMEOUT_MS), asyncHandler(proxyStreamHandler));
 
   // Library stats
-  app.get('/:token/api/library', tokenAuth, getLibraryHandler);
+  app.get(`${p}/api/library`, auth, getLibraryHandler);
 
   // Force resync
-  app.post('/:token/api/library/resync', tokenAuth, asyncHandler(resyncHandler));
+  app.post(`${p}/api/library/resync`, auth, asyncHandler(resyncHandler));
 
   // Force immediate sync
-  app.post('/:token/api/library/sync', tokenAuth, asyncHandler(syncHandler));
+  app.post(`${p}/api/library/sync`, auth, asyncHandler(syncHandler));
 
   // Get unmatched torrents
-  app.get('/:token/api/library/unmatched', tokenAuth, getUnmatchedHandler);
+  app.get(`${p}/api/library/unmatched`, auth, getUnmatchedHandler);
 
   // Report progress
-  app.post('/:token/api/progress', tokenAuth, reportProgressHandler);
+  app.post(`${p}/api/progress`, auth, reportProgressHandler);
 
   // Get progress for specific item
-  app.get('/:token/api/progress/:imdbId', tokenAuth, getProgressHandler);
+  app.get(`${p}/api/progress/:imdbId`, auth, getProgressHandler);
 
   // Delete progress for specific item
-  app.delete('/:token/api/progress/:imdbId', tokenAuth, deleteProgressHandler);
+  app.delete(`${p}/api/progress/:imdbId`, auth, deleteProgressHandler);
 
   // Get watch history
-  app.get('/:token/api/history', tokenAuth, getHistoryHandler);
+  app.get(`${p}/api/history`, auth, getHistoryHandler);
 
   // Get watch stats
-  app.get('/:token/api/history/stats', tokenAuth, getHistoryStatsHandler);
+  app.get(`${p}/api/history/stats`, auth, getHistoryStatsHandler);
 
   // Mark item as completed
-  app.post('/:token/api/progress/:imdbId/complete', tokenAuth, markCompleteHandler);
+  app.post(`${p}/api/progress/:imdbId/complete`, auth, markCompleteHandler);
+
+  // Toggle low bandwidth mode
+  app.post(`${p}/api/bandwidth-mode`, auth, asyncHandler(toggleBandwidthModeHandler));
 }

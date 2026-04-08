@@ -41,6 +41,11 @@ function loadConfig() {
     // Watch history settings
     watchCompletionThreshold: parseFloat(process.env.WATCH_COMPLETION_THRESHOLD || '0.90'),
 
+    // Transcoding settings - use Real-Debrid HLS transcoding when available
+    transcodingEnabled: process.env.TRANSCODING_ENABLED !== 'false', // Default true
+    transcodingPreferHls: process.env.TRANSCODING_PREFER_HLS !== 'false', // Default true
+    transcodingCacheTtl: parseInt(process.env.TRANSCODING_CACHE_TTL, 10) || 3600, // 1 hour
+
     // Derived
     isDev: process.env.NODE_ENV !== 'production',
   };
@@ -64,6 +69,12 @@ function loadConfig() {
   // Validate watch completion threshold
   if (isNaN(config.watchCompletionThreshold) || config.watchCompletionThreshold < 0.5 || config.watchCompletionThreshold > 0.99) {
     console.error('WATCH_COMPLETION_THRESHOLD must be between 0.5 and 0.99');
+    process.exit(1);
+  }
+
+  // Validate transcoding cache TTL
+  if (isNaN(config.transcodingCacheTtl) || config.transcodingCacheTtl < 60 || config.transcodingCacheTtl > 86400) {
+    console.error('TRANSCODING_CACHE_TTL must be between 60 and 86400 seconds');
     process.exit(1);
   }
 
