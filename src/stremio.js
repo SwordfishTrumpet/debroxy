@@ -8,6 +8,7 @@ import { LRUCache } from 'lru-cache';
 import * as db from './db.js';
 import * as rd from './realdebrid.js';
 import * as parser from './parser.js';
+import * as settings from './settings.js';
 import { getCinemetaMeta, getStatus as getLibraryStatus } from './library.js';
 import config from './config.js';
 import { createLogger } from './logger.js';
@@ -70,7 +71,7 @@ const hdrScoreMap = new Map([
 /**
  * Quality hierarchy for minimum quality filtering
  */
-const QUALITY_ORDER = ['360p', '480p', '576p', '720p', '1080p', '1440p', '2160p', '4k'];
+const QUALITY_ORDER = ['360p', '480p', '576p', '720p', '1080p', '1440p', '2160p', '4k', 'uhd'];
 
 /**
  * Quality tag mapping for Stremio's quality filter
@@ -208,38 +209,11 @@ function formatFileSize(bytes) {
 }
 
 /**
- * Format quality badge for stream display
- * @param {Object} qualityInfo - Quality info object
- * @returns {string} Formatted quality badge
- */
-function formatQualityBadge(qualityInfo) {
-  const parts = [];
-  
-  if (qualityInfo.quality) {
-    parts.push(qualityInfo.quality.toUpperCase());
-  }
-  
-  if (qualityInfo.hdr) {
-    parts.push(qualityInfo.hdr.toUpperCase());
-  }
-  
-  if (qualityInfo.codec) {
-    parts.push(qualityInfo.codec.toUpperCase());
-  }
-  
-  if (qualityInfo.source) {
-    parts.push(qualityInfo.source.toUpperCase());
-  }
-  
-  return parts.join(' · ');
-}
-
-/**
- * Get minimum quality threshold from config
+ * Get minimum quality threshold from runtime settings
  * @returns {string|null} Minimum quality or null if no filter
  */
 function getMinQualityThreshold() {
-  const minQuality = config.minStreamQuality;
+  const minQuality = settings.get('minStreamQuality');
   if (!minQuality) return null;
   return minQuality.toLowerCase();
 }
@@ -596,19 +570,47 @@ function createStreamEntry({ rdId, filename, filesize, urlPrefix, torrent, score
   });
 
   const sizeStr = formatFileSize(filesize);
-  const qualityBadge = formatQualityBadge({
-    quality: torrent.quality,
-    codec: torrent.codec,
-    hdr: torrent.hdr,
-    source: torrent.source,
-  });
   
-  // Build descriptive title with all available info
-  let title = qualityBadge;
-  if (title) title += '\n';
-  title += filename;
-  if (sizeStr) title += `\n📦 ${sizeStr}`;
-  if (torrent.audio) title += `\n🔊 ${torrent.audio.toUpperCase()}`;
+  // Build structured title with quality info
+  const parts = [];
+  if (torrent.quality) parts.push(torrent.quality.toUpperCase());
+  if (torrent.hdr && torrent.hdr !== 'SDR') parts.push(torrent.hdr.toUpperCase());
+  // Parse title from filename
+  const parsedTitle = parser.parse(filename);
+  const cleanTitle = parsedTitle.title || filename;
+  
+  // Build title with year if available
+  let titleLine = cleanTitle;
+  if (torrent.year) {
+    titleLine += ` (${torrent.year})`;
+  }
+  
+  // Build quality info
+  const qualityParts = [];
+  if (torrent.quality) qualityParts.push(torrent.quality.toUpperCase());
+  if (torrent.hdr && torrent.hdr !== 'SDR') qualityParts.push(torrent.hdr.toUpperCase());
+  if (torrent.source) qualityParts.push(torrent.source);
+  if (torrent.codec) qualityParts.push(torrent.codec.toUpperCase());
+  if (torrent.audio) qualityParts.push(torrent.audio.toUpperCase());
+  const qualityLine = qualityParts.join(' · ');
+  
+  // Build meta info (size and group)
+  const metaParts = [];
+  if (sizeStr) metaParts.push(`📦 ${sizeStr}`);
+  
+  // Extract release group from filename (text after last dash)
+  const groupMatch = filename.match(/-([A-Za-z0-9]+)$/);
+  if (groupMatch) {
+    metaParts.push(`🏷️ ${groupMatch[1]}`);
+  }
+  const metaLine = metaParts.join(' · ');
+  
+  // Combine: Title (Year)
+  //          Quality info
+  //          Size · Group
+  let title = titleLine;
+  if (qualityLine) title += '\n' + qualityLine;
+  if (metaLine) title += '\n' + metaLine;
 
   const streamEntry = {
     name: 'Debroxy',
@@ -776,12 +778,11 @@ export async function handleStream(type, id, token) {
         result.push(streamEntry);
       }
     } else {
-      // Single file or movie - filesize may be null if not in torrent_files
-      // We use undefined to indicate size is unknown (will be fetched at play time)
+      // Single file or movie - filesize now stored in torrents table
       const streamEntry = createStreamEntry({
         rdId,
         filename: torrent.filename,
-        filesize: null, // Single-file torrents don't have filesize stored
+        filesize: torrent.filesize || null,
         urlPrefix,
         torrent,
         score: data.score,
@@ -850,7 +851,10 @@ export async function getStreamUrl(streamInfo, clientIp) {
     });
   }
 
-  const cacheKey = `${streamInfo.rdId}:${streamInfo.fileId || 'main'}`;
+  // Check if low bandwidth mode is enabled for this client (needed for cache key and transcoding)
+  const lowBandwidthMode = clientIp ? db.getLowBandwidthMode(clientIp) : false;
+  
+  const cacheKey = `${streamInfo.rdId}:${streamInfo.fileId || 'main'}:${lowBandwidthMode ? 'lbw' : 'std'}`;
   
   // Check cache first
   const cached = urlCache.get(cacheKey);
@@ -897,16 +901,24 @@ export async function getStreamUrl(streamInfo, clientIp) {
   let isTranscoded = false;
   let transcodeData = null;
 
-  // Check if low bandwidth mode is enabled for this client
-  const lowBandwidthMode = clientIp ? db.getLowBandwidthMode(clientIp) : false;
+  // Only check transcoding if enabled in runtime settings
+  const transcodingEnabled = settings.get('transcodingEnabled');
+  const transcodingPreferHls = settings.get('transcodingPreferHls');
 
-  // Only check transcoding if enabled in config
-  if (config.transcodingEnabled) {
+  if (transcodingEnabled) {
     try {
       transcodeData = await rd.getTranscodeLinks(unrestricted.id);
       const apple = transcodeData?.apple;
 
       if (apple) {
+        log.info({
+          clientIp,
+          lowBandwidthMode,
+          has480p: !!apple['480p'],
+          hasFull: !!apple.full,
+          qualities: Object.keys(apple),
+        }, 'Transcoding options available');
+
         // If low bandwidth mode is enabled, prefer 480p
         if (lowBandwidthMode && apple['480p']) {
           streamUrl = apple['480p'];
@@ -918,7 +930,7 @@ export async function getStreamUrl(streamInfo, clientIp) {
             filename: unrestricted.filename,
             quality: '480p',
           }, 'Low bandwidth mode: using 480p transcoding');
-        } else if (apple.full) {
+        } else if (apple.full && transcodingPreferHls) {
           // Use HLS transcoding - much more compatible with Stremio
           streamUrl = apple.full;
           mimeType = 'application/vnd.apple.mpegurl';

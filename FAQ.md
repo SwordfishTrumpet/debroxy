@@ -97,7 +97,6 @@ Comprehensive technical documentation for Debroxy.
 | `CINEMETA_MAX_RETRIES` | `3` | Max retries for Cinemeta rate limiting |
 | `MAX_SYNC_ITERATIONS` | `10000` | Safety limit for sync loops |
 | `DB_MAX_RETRIES` | `5` | Database connection retry attempts |
-| `WATCH_COMPLETION_THRESHOLD` | `0.90` | Percentage (0.5-0.99) at which items are marked as "completed" in watch history |
 
 ### PROXY_TOKEN: When to Use It
 

@@ -149,8 +149,8 @@ export function createCircuitBreaker(options = {}) {
         }
         throw error;
       } finally {
-        // Release the lock if we were in half-open state
-        if (state === State.HALF_OPEN || halfOpenLock) {
+        // Release the lock if we claimed the test slot
+        if (halfOpenLock) {
           halfOpenLock = false;
         }
       }
