@@ -764,7 +764,14 @@ export async function resync() {
   db.deleteSyncState('sync_offset');
   db.deleteSyncState('last_sync');
 
-  await initialSync();
+  try {
+    await initialSync();
+  } catch (error) {
+    // Ensure sync lock is released even on error to prevent deadlock
+    releaseSyncLock();
+    log.error({ error: error.message }, 'Full resync failed');
+    throw error;
+  }
 }
 
 /**

@@ -327,10 +327,9 @@ export function getManifest() {
   const libraryStatus = getLibraryStatus();
   const hasContent = libraryStatus.stats && (libraryStatus.stats.movies > 0 || libraryStatus.stats.series > 0);
   
-  // Only show sync indicator if syncing AND no content yet
-  const syncSuffix = (libraryStatus.isSyncing && !hasContent) || !libraryStatus.isComplete 
-    ? ' (Syncing...)' 
-    : '';
+  // Only show sync indicator if syncing AND no content yet, or if initial sync is not complete
+  const syncSuffix = libraryStatus.isSyncing && !hasContent ? ' (Syncing...)' : 
+                     !libraryStatus.isComplete ? ' (Syncing...)' : '';
   
   return {
     id: 'com.debroxy.stremio',
@@ -512,28 +511,32 @@ export function handleCatalog(type, id, extra = {}) {
  * @returns {Promise<Object>} Meta response
  */
 export async function handleMeta(type, id) {
-  // Try Cinemeta first for rich metadata
-  const cinemeta = await getCinemetaMeta(id, type);
-  
-  if (cinemeta) {
-    return {
-      meta: {
-        id: cinemeta.imdb_id || cinemeta.id,
-        type: cinemeta.type,
-        name: cinemeta.name,
-        poster: cinemeta.poster,
-        background: cinemeta.background,
-        description: cinemeta.description,
-        year: cinemeta.year,
-        imdbRating: cinemeta.imdbRating,
-        genres: cinemeta.genres,
-        cast: cinemeta.cast,
-        director: cinemeta.director,
-        runtime: cinemeta.runtime,
-        trailers: cinemeta.trailers,
-        videos: cinemeta.videos,
-      },
-    };
+  try {
+    // Try Cinemeta first for rich metadata
+    const cinemeta = await getCinemetaMeta(id, type);
+    
+    if (cinemeta) {
+      return {
+        meta: {
+          id: cinemeta.imdb_id || cinemeta.id,
+          type: cinemeta.type,
+          name: cinemeta.name,
+          poster: cinemeta.poster,
+          background: cinemeta.background,
+          description: cinemeta.description,
+          year: cinemeta.year,
+          imdbRating: cinemeta.imdbRating,
+          genres: cinemeta.genres,
+          cast: cinemeta.cast,
+          director: cinemeta.director,
+          runtime: cinemeta.runtime,
+          trailers: cinemeta.trailers,
+          videos: cinemeta.videos,
+        },
+      };
+    }
+  } catch (error) {
+    log.debug({ id, type, error: error.message }, 'Cinemeta meta fetch failed, falling back to local');
   }
 
   // Fall back to local data
@@ -978,11 +981,11 @@ export async function getStreamUrl(streamInfo, clientIp) {
  * Handle subtitles resource request (Stremio subtitles protocol)
  * @param {string} type - 'movie' or 'series'
  * @param {string} id - IMDB ID (format: tt1234567 or tt1234567:1:2 for series)
- * @param {string} token - Auth token for URL generation (use '_' when auth disabled)
+ * @param {string} token - Auth token for URL generation (undefined when auth disabled)
  * @returns {Object} Subtitles response { subtitles: [...] }
  */
 export function handleSubtitles(type, id, token) {
-  const urlPrefix = config.authEnabled ? `${config.externalUrl}/${token}` : config.externalUrl;
+  const urlPrefix = config.authEnabled && token ? `${config.externalUrl}/${token}` : config.externalUrl;
   const [imdbId, seasonStr, episodeStr] = id.split(':');
   const season = seasonStr && /^\d+$/.test(seasonStr) ? parseInt(seasonStr, 10) : null;
   const episode = episodeStr && /^\d+$/.test(episodeStr) ? parseInt(episodeStr, 10) : null;

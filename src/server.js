@@ -282,15 +282,15 @@ async function shutdown() {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-process.on('uncaughtException', async (error) => {
+process.on('uncaughtException', (error) => {
   log.error({ error: error.message, stack: error.stack }, 'Uncaught exception');
-  try { await db.close(); } catch { /* ignore */ }
+  try { db.close(); } catch { /* ignore */ }
   process.exit(1);
 });
 
-process.on('unhandledRejection', async (reason) => {
+process.on('unhandledRejection', (reason) => {
   log.error({ reason }, 'Unhandled rejection');
-  try { await db.close(); } catch { /* ignore */ }
+  try { db.close(); } catch { /* ignore */ }
   process.exit(1);
 });
 

@@ -215,8 +215,13 @@ function validateSetting(key, value) {
     return { valid: false, error: `No validation rules for ${key}` };
   }
 
-  // Reject null, undefined, or empty strings
-  if (value === null || value === undefined || value === '') {
+  // Reject null, undefined
+  if (value === null || value === undefined) {
+    return { valid: false, error: `${key} cannot be empty` };
+  }
+
+  // Reject empty strings unless explicitly allowed in enum values
+  if (value === '' && !(rules.type === 'enum' && rules.values.includes(''))) {
     return { valid: false, error: `${key} cannot be empty` };
   }
 
