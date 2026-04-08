@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS torrents (
     codec TEXT,
     audio TEXT,
     hdr TEXT,
+    year INTEGER,
     season INTEGER,
     episode INTEGER,
     added_at INTEGER NOT NULL
@@ -234,8 +235,8 @@ const statements = {
   `),
 
   upsertTorrent: db.prepare(`
-    INSERT INTO torrents (rd_id, imdb_id, hash, filename, quality, source, codec, audio, hdr, season, episode, added_at)
-    VALUES (@rd_id, @imdb_id, @hash, @filename, @quality, @source, @codec, @audio, @hdr, @season, @episode, @added_at)
+    INSERT INTO torrents (rd_id, imdb_id, hash, filename, quality, source, codec, audio, hdr, year, season, episode, added_at)
+    VALUES (@rd_id, @imdb_id, @hash, @filename, @quality, @source, @codec, @audio, @hdr, @year, @season, @episode, @added_at)
     ON CONFLICT(rd_id) DO UPDATE SET
       imdb_id = excluded.imdb_id,
       hash = excluded.hash,
@@ -245,6 +246,7 @@ const statements = {
       codec = excluded.codec,
       audio = excluded.audio,
       hdr = excluded.hdr,
+      year = excluded.year,
       season = excluded.season,
       episode = excluded.episode,
       added_at = excluded.added_at
@@ -342,18 +344,19 @@ const statements = {
   getTitleByImdb: db.prepare('SELECT * FROM titles WHERE imdb_id = ?'),
 
   getStreamsForTitle: db.prepare(`
-    SELECT t.*, tf.id as file_id, tf.rd_file_id, tf.filename as file_name, tf.filesize, tf.link,
+    SELECT t.rd_id, t.imdb_id, t.hash, t.filename, t.quality, t.source, t.codec, t.audio, t.hdr, t.year,
+           t.season, t.episode, tf.id as file_id, tf.rd_file_id, tf.filename as file_name, tf.filesize, tf.link,
            tf.season as file_season, tf.episode as file_episode
     FROM torrents t
     LEFT JOIN torrent_files tf ON tf.rd_torrent_id = t.rd_id
     WHERE t.imdb_id = @imdb_id
     AND (
-      @season IS NULL 
+      @season IS NULL
       OR (tf.season IS NOT NULL AND tf.season = @season)
       OR (tf.season IS NULL AND t.season = @season)
     )
     AND (
-      @episode IS NULL 
+      @episode IS NULL
       OR (tf.episode IS NOT NULL AND tf.episode = @episode)
       OR (tf.episode IS NULL AND t.episode = @episode)
       OR (tf.episode IS NULL AND t.episode IS NULL AND t.season = @season)
@@ -534,6 +537,7 @@ export function upsertTorrent(torrent) {
     codec: torrent.codec || null,
     audio: torrent.audio || null,
     hdr: torrent.hdr || null,
+    year: torrent.year || null,
     season: torrent.season || null,
     episode: torrent.episode || null,
     added_at: torrent.added_at || Date.now(),

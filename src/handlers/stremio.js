@@ -5,6 +5,7 @@
 
 import * as stremio from '../stremio.js';
 import * as proxy from '../proxy.js';
+import * as settings from '../settings.js';
 import config from '../config.js';
 import * as library from '../library.js';
 import * as db from '../db.js';
@@ -141,11 +142,12 @@ export function configureHandler(req, res) {
     library: library.getStatus(),
     streams: {
       active: proxy.getActiveStreams().length,
-      max: config.maxConcurrentStreams,
+      max: settings.get('maxConcurrentStreams'),
     },
     token: token,
     apiBase: apiBase,
     lowBandwidthMode: lowBandwidthMode,
+    settings: settings.getAll(),
   });
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

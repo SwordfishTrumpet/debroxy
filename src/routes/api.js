@@ -26,6 +26,7 @@ import {
   getHistoryStatsHandler,
   markCompleteHandler,
   toggleBandwidthModeHandler,
+  rdStatusHandler,
   getSettingsHandler,
   updateSettingsHandler,
 } from '../handlers/api.js';
@@ -45,6 +46,9 @@ export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware, pre
   // RD user info
   app.get(`${p}/api/user`, auth, asyncHandler(getUserHandler));
 
+  // RD connection status (for configure page)
+  app.get(`${p}/api/rd-status`, auth, asyncHandler(rdStatusHandler));
+
   // List RD torrents
   app.get(`${p}/api/torrents`, auth, asyncHandler(listTorrentsHandler));
 
@@ -61,14 +65,14 @@ export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware, pre
   app.get(`${p}/api/downloads`, auth, asyncHandler(listDownloadsHandler));
 
   // Proxy stream status
-  app.get(`${p}/api/streams`, auth, getStreamsHandler);
+  app.get(`${p}/api/streams`, auth, asyncHandler(getStreamsHandler));
 
   // Generic URL proxy (for direct RD URLs) - with extended timeout for streaming
   app.options(`${p}/proxy/stream`, auth, proxy.handlePreflight);
   app.get(`${p}/proxy/stream`, auth, createTimeoutMiddleware(STREAM_TIMEOUT_MS), asyncHandler(proxyStreamHandler));
 
   // Library stats
-  app.get(`${p}/api/library`, auth, getLibraryHandler);
+  app.get(`${p}/api/library`, auth, asyncHandler(getLibraryHandler));
 
   // Force resync
   app.post(`${p}/api/library/resync`, auth, asyncHandler(resyncHandler));
@@ -77,25 +81,25 @@ export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware, pre
   app.post(`${p}/api/library/sync`, auth, asyncHandler(syncHandler));
 
   // Get unmatched torrents
-  app.get(`${p}/api/library/unmatched`, auth, getUnmatchedHandler);
+  app.get(`${p}/api/library/unmatched`, auth, asyncHandler(getUnmatchedHandler));
 
   // Report progress
-  app.post(`${p}/api/progress`, auth, reportProgressHandler);
+  app.post(`${p}/api/progress`, auth, asyncHandler(reportProgressHandler));
 
   // Get progress for specific item
-  app.get(`${p}/api/progress/:imdbId`, auth, getProgressHandler);
+  app.get(`${p}/api/progress/:imdbId`, auth, asyncHandler(getProgressHandler));
 
   // Delete progress for specific item
-  app.delete(`${p}/api/progress/:imdbId`, auth, deleteProgressHandler);
+  app.delete(`${p}/api/progress/:imdbId`, auth, asyncHandler(deleteProgressHandler));
 
   // Get watch history
-  app.get(`${p}/api/history`, auth, getHistoryHandler);
+  app.get(`${p}/api/history`, auth, asyncHandler(getHistoryHandler));
 
   // Get watch stats
-  app.get(`${p}/api/history/stats`, auth, getHistoryStatsHandler);
+  app.get(`${p}/api/history/stats`, auth, asyncHandler(getHistoryStatsHandler));
 
   // Mark item as completed
-  app.post(`${p}/api/progress/:imdbId/complete`, auth, markCompleteHandler);
+  app.post(`${p}/api/progress/:imdbId/complete`, auth, asyncHandler(markCompleteHandler));
 
   // Toggle low bandwidth mode
   app.post(`${p}/api/bandwidth-mode`, auth, asyncHandler(toggleBandwidthModeHandler));

@@ -42,13 +42,6 @@ export const activeStreams = new client.Gauge({
   help: 'Number of currently active proxy streams',
 });
 
-/** Stream bytes transferred counter */
-export const streamBytesTotal = new client.Counter({
-  name: 'debroxy_stream_bytes_total',
-  help: 'Total bytes transferred through proxy streams',
-  labelNames: ['direction'], // 'download' or 'upload'
-});
-
 // ==================
 // Library Metrics
 // ==================
@@ -70,36 +63,6 @@ export const librarySize = new client.Gauge({
   name: 'debroxy_library_size',
   help: 'Number of items in library',
   labelNames: ['type'], // 'movies', 'series', 'torrents', 'unmatched'
-});
-
-// ==================
-// API Error Metrics
-// ==================
-
-/** Real-Debrid API errors counter */
-export const rdApiErrors = new client.Counter({
-  name: 'debroxy_rd_api_errors_total',
-  help: 'Total Real-Debrid API errors',
-  labelNames: ['endpoint', 'error_type'],
-});
-
-/** Cinemeta API errors counter */
-export const cinemetaErrors = new client.Counter({
-  name: 'debroxy_cinemeta_errors_total',
-  help: 'Total Cinemeta API errors',
-  labelNames: ['error_type'],
-});
-
-// ==================
-// Database Metrics
-// ==================
-
-/** Database query duration histogram */
-export const dbQueryDuration = new client.Histogram({
-  name: 'debroxy_db_query_duration_seconds',
-  help: 'Database query duration in seconds',
-  labelNames: ['operation'],
-  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
 });
 
 // ==================
@@ -186,13 +149,9 @@ export default {
   httpRequestsTotal,
   httpRequestDuration,
   activeStreams,
-  streamBytesTotal,
   syncStatus,
   lastSyncTimestamp,
   librarySize,
-  rdApiErrors,
-  cinemetaErrors,
-  dbQueryDuration,
   normalizeRoute,
   metricsMiddleware,
   updateLibraryMetrics,

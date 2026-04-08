@@ -328,8 +328,9 @@ export function getManifest() {
   const hasContent = libraryStatus.stats && (libraryStatus.stats.movies > 0 || libraryStatus.stats.series > 0);
   
   // Only show sync indicator if syncing AND no content yet, or if initial sync is not complete
-  const syncSuffix = libraryStatus.isSyncing && !hasContent ? ' (Syncing...)' : 
-                     !libraryStatus.isComplete ? ' (Syncing...)' : '';
+  const syncSuffix = libraryStatus.isSyncing && !hasContent
+    ? ' (Syncing...)'
+    : !libraryStatus.isComplete ? ' (Syncing...)' : '';
   
   return {
     id: 'com.debroxy.stremio',

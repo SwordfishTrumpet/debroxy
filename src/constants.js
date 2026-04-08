@@ -28,9 +28,6 @@ export const PROXY_REQUEST_TIMEOUT_MS = 30000;
 /** Maximum redirects to follow for proxy requests */
 export const PROXY_MAX_REDIRECTS = 5;
 
-/** Maximum proxy request size in bytes (default 10GB for streaming) */
-export const MAX_PROXY_SIZE_BYTES = parseInt(process.env.MAX_PROXY_SIZE_MB || '10240', 10) * 1024 * 1024;
-
 /** Cinemeta API base URL */
 export const CINEMETA_BASE_URL = 'https://v3-cinemeta.strem.io';
 
@@ -199,14 +196,3 @@ export const LANGUAGE_CODES = {
   lithuanian: 'Lithuanian',
 };
 
-/** Watch history completion threshold (0.0 - 1.0) */
-export const WATCH_COMPLETION_THRESHOLD = 0.90;
-
-/** Maximum items in Continue Watching catalog */
-export const MAX_CONTINUE_WATCHING = 50;
-
-/** Auto-cleanup watch history after N days (for completed items) */
-export const WATCH_HISTORY_MAX_AGE_DAYS = 90;
-
-/** Minimum interval between progress updates for same item (milliseconds) */
-export const PROGRESS_REPORT_DEBOUNCE_MS = 5000;

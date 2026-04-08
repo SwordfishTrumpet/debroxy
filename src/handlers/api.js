@@ -321,6 +321,27 @@ export function toggleBandwidthModeHandler(req, res) {
 }
 
 /**
+ * RD connection status handler
+ * Returns RD user info and circuit breaker state
+ */
+export async function rdStatusHandler(req, res) {
+  try {
+    const user = await rd.getUser();
+    res.json({
+      connected: true,
+      user,
+      circuitBreaker: rd.getCircuitBreakerState(),
+    });
+  } catch (error) {
+    res.json({
+      connected: false,
+      error: error.response?.data?.error || error.message,
+      circuitBreaker: rd.getCircuitBreakerState(),
+    });
+  }
+}
+
+/**
  * Get settings handler
  * Returns current settings with metadata
  */

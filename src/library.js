@@ -10,7 +10,7 @@ import { LRUCache } from 'lru-cache';
 import * as db from './db.js';
 import * as rd from './realdebrid.js';
 import * as parser from './parser.js';
-import config from './config.js';
+import * as settings from './settings.js';
 import { createLogger } from './logger.js';
 import { 
   CINEMETA_BASE_URL, 
@@ -284,6 +284,7 @@ async function storeTorrent(torrent, parsed, meta, type) {
       codec: parsed.codec,
       audio: parsed.audio,
       hdr: parsed.hdr,
+      year: parsed.year,
       season: parsed.season,
       episode: parsed.episode,
     });
@@ -687,9 +688,10 @@ async function incrementalSync() {
     );
 
     // Mark completed items based on threshold
-    const completedCount = db.markCompletedByThreshold(config.watchCompletionThreshold);
+    const watchThreshold = settings.get('watchCompletionThreshold');
+    const completedCount = db.markCompletedByThreshold(watchThreshold);
     if (completedCount > 0) {
-      log.info({ completedCount, threshold: config.watchCompletionThreshold }, 'Marked items as completed');
+      log.info({ completedCount, threshold: watchThreshold }, 'Marked items as completed');
     }
 
     // Clean up old completed watch history entries
@@ -713,9 +715,9 @@ export function startSyncTimer() {
     clearInterval(syncTimer);
   }
 
-  const intervalMs = config.syncIntervalMin * 60 * 1000;
+  const intervalMs = settings.get('syncIntervalMin') * 60 * 1000;
   syncTimer = setInterval(incrementalSync, intervalMs);
-  log.info({ intervalMin: config.syncIntervalMin }, 'Sync timer started');
+  log.info({ intervalMin: settings.get('syncIntervalMin') }, 'Sync timer started');
 }
 
 /**
@@ -744,7 +746,8 @@ export async function initialize() {
   }
 
   // Mark completed items on startup
-  const completedCount = db.markCompletedByThreshold(config.watchCompletionThreshold);
+  const startupThreshold = settings.get('watchCompletionThreshold');
+  const completedCount = db.markCompletedByThreshold(startupThreshold);
   if (completedCount > 0) {
     log.info({ completedCount }, 'Marked items as completed on startup');
   }

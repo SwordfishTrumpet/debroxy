@@ -8,7 +8,7 @@ import { lookup } from 'dns/promises';
 import axios from 'axios';
 import config from './config.js';
 import { createLogger } from './logger.js';
-import { PROXY_REQUEST_TIMEOUT_MS, PROXY_MAX_REDIRECTS, MAX_PROXY_SIZE_BYTES, MAX_STREAM_COUNTER } from './constants.js';
+import { PROXY_REQUEST_TIMEOUT_MS, PROXY_MAX_REDIRECTS, MAX_STREAM_COUNTER } from './constants.js';
 
 const log = createLogger('proxy');
 
@@ -267,17 +267,6 @@ export function createProxyHandler(options) {
       return res.status(403).json({ error: validation.error, error_code: 'FORBIDDEN' });
     }
 
-    // Check Content-Length header for size limits (if present in request)
-    const contentLength = parseInt(req.headers['content-length'], 10);
-    if (!isNaN(contentLength) && contentLength > MAX_PROXY_SIZE_BYTES) {
-      log.warn({ contentLength, maxSize: MAX_PROXY_SIZE_BYTES }, 'Request payload too large');
-      return res.status(413).json({ 
-        error: 'Payload too large',
-        error_code: 'PAYLOAD_TOO_LARGE',
-        maxSizeBytes: MAX_PROXY_SIZE_BYTES,
-      });
-    }
-
     // Check concurrency limit
     if (activeStreams.size >= config.maxConcurrentStreams) {
       log.warn({ active: activeStreams.size, max: config.maxConcurrentStreams }, 'Max concurrent streams reached');
@@ -405,7 +394,7 @@ export function createProxyHandler(options) {
 
       // Handle client disconnect
       req.on('close', () => {
-        if (req.aborted || req.destroyed) {
+        if (req.destroyed) {
           if (!res.writableEnded) {
             log.debug({ streamId }, 'Client disconnected, aborting upstream');
             try {

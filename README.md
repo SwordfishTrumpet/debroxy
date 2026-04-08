@@ -122,9 +122,11 @@ https://debroxy.yourdomain.com/YOUR_TOKEN/configure
 
 The configure page shows:
 - Library sync status and statistics
+- Real-Debrid account status (premium expiry, usage)
 - Active stream count
 - **Quick Actions**: Sync Now, Full Resync, Refresh Stats
 - **Low Bandwidth Mode**: Toggle to force 480p transcoding for slow connections
+- **Runtime Settings**: Adjust settings without restarting the server
 
 **Button Actions:**
 | Button | What it does |
@@ -132,6 +134,18 @@ The configure page shows:
 | **Sync Now** | Checks Real-Debrid for new torrents added since last sync |
 | **Full Resync** | Clears and rebuilds entire library from scratch (takes several minutes) |
 | **Refresh** | Updates displayed statistics without syncing |
+
+**Runtime Settings** (adjustable from the configure page):
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Max Concurrent Streams | `3` | Simultaneous streaming connections (1–20) |
+| Min Stream Quality | All | Lowest quality to show: `2160p`, `1080p`, `720p`, etc. |
+| Transcoding | `on` | HLS transcoding for better Stremio compatibility |
+| Prefer HLS | `on` | Prioritize HLS transcoded streams over direct |
+| Sync Interval | `15 min` | How often to sync with Real-Debrid (1–1440 min) |
+| Watch Completion | `90%` | Percentage watched to mark as completed (50–99%) |
+
+These settings are persisted in the database and override their corresponding environment variables. Reset to defaults from the configure page at any time.
 
 ---
 
@@ -164,12 +178,17 @@ Debroxy is designed to complement **DebridMediaManager** (or any RD library tool
 | `EXTERNAL_URL` | ✅ | — | Public URL (e.g., `https://debroxy.example.com`) |
 | `PROXY_TOKEN` | | — | Auth token (min 32 chars). If unset, auth is disabled. |
 | `PORT` | | `8888` | Server port |
+| `DB_PATH` | | `./data/debroxy.db` | SQLite database path |
 | `MAX_CONCURRENT_STREAMS` | | `3` | Max simultaneous streams |
-| `SYNC_INTERVAL_MIN` | | `15` | Sync frequency with RD |
+| `SYNC_INTERVAL_MIN` | | `15` | Sync frequency with RD (minutes) |
 | `LOG_LEVEL` | | `info` | `trace`, `debug`, `info`, `warn`, `error` |
 | `MIN_STREAM_QUALITY` | | — | Minimum quality: `2160p`, `1080p`, `720p`, etc. |
-| `TRANSCODING_ENABLED` | | `true` | Enable Real-Debrid HLS transcoding for better compatibility |
+| `WATCH_COMPLETION_THRESHOLD` | | `0.90` | Mark as completed at this % (0.5–0.99) |
+| `TRANSCODING_ENABLED` | | `true` | Enable Real-Debrid HLS transcoding |
+| `TRANSCODING_PREFER_HLS` | | `true` | Prioritize HLS over direct streams |
 | `TRANSCODING_CACHE_TTL` | | `3600` | Cache transcoding URLs (seconds) |
+| `TRUSTED_PROXIES` | | `127.0.0.1,::1` | Reverse proxy IPs for client IP detection |
+| `ENABLE_METRICS` | | `true` | Enable Prometheus metrics endpoint |
 
 **Full options:** See [FAQ.md](FAQ.md#configuration-reference)
 

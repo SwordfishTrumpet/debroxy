@@ -1,143 +1,82 @@
 /**
- * Library sync tests
- * Tests for library initialization and sync
+ * Library sync unit tests
+ * 
+ * Note: Library functions (initialize, sync, resync) require a live RD API connection.
+ * For integration testing with mocked DB, see library.integration.test.js.
+ * These tests validate pure logic that can be tested without external dependencies.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-
-// Note: These tests use mocked dependencies
-// In a real test environment, you'd set up proper mocks
+import * as parser from '../src/parser.js';
 
 describe('library', () => {
-  describe('processTorrent', () => {
-    it('should parse and match a movie torrent', async () => {
-      // Mock test - validates the concept
-      const mockTorrent = {
-        id: 'ABC123',
-        filename: 'Movie.Name.2023.1080p.BluRay.x264-GROUP',
-        hash: 'abc123def456',
-      };
-
-      // The library module would:
-      // 1. Parse the filename
-      // 2. Search Cinemeta
-      // 3. Store in database
+  describe('torrent processing pipeline (parser stage)', () => {
+    it('should parse a movie torrent filename', () => {
+      const parsed = parser.parse('Movie.Name.2023.1080p.BluRay.x264-GROUP');
       
-      assert.ok(mockTorrent.filename.includes('Movie'));
+      assert.strictEqual(parsed.title, 'Movie Name');
+      assert.strictEqual(parsed.year, 2023);
+      assert.ok(parsed.quality, 'should have quality');
+      assert.ok(parsed.source, 'should have source');
+      assert.ok(parsed.codec, 'should have codec');
     });
 
-    it('should mark unmatched torrents', async () => {
-      const mockTorrent = {
-        id: 'XYZ789',
-        filename: 'random_file_with_no_pattern.mkv',
-      };
-
-      // Torrents that can't be parsed should be marked unmatched
-      assert.ok(mockTorrent.filename.length > 0);
-    });
-  });
-
-  describe('incrementalSync', () => {
-    it('should only process new torrents', async () => {
-      // Mock indexed IDs
-      const indexedIds = new Set(['A', 'B', 'C']);
-      const currentTorrents = [
-        { id: 'A', filename: 'existing1' },
-        { id: 'B', filename: 'existing2' },
-        { id: 'D', filename: 'new_torrent' },
-      ];
-
-      const newTorrents = currentTorrents.filter(t => !indexedIds.has(t.id));
-      assert.strictEqual(newTorrents.length, 1);
-      assert.strictEqual(newTorrents[0].id, 'D');
+    it('should parse a series torrent filename with season/episode', () => {
+      const parsed = parser.parse('Show.Name.S02E05.720p.WEB-DL.x265-GROUP');
+      
+      assert.strictEqual(parsed.title, 'Show Name');
+      assert.strictEqual(parsed.season, 2);
+      assert.strictEqual(parsed.episode, 5);
+      assert.ok(parsed.quality, 'should have quality');
     });
 
-    it('should detect removed torrents', async () => {
-      const indexedIds = new Set(['A', 'B', 'C']);
-      const currentIds = new Set(['A', 'C']); // B was removed
+    it('should detect season packs', () => {
+      const parsed = parser.parse('Show.Name.S03.COMPLETE.1080p.BluRay.x264');
+      
+      assert.strictEqual(parsed.season, 3);
+      assert.strictEqual(parsed.episode, null);
+    });
 
-      const removed = [];
-      for (const id of indexedIds) {
-        if (!currentIds.has(id)) {
-          removed.push(id);
-        }
-      }
+    it('should build search query with year', () => {
+      const parsed = parser.parse('Movie.Name.2023.1080p.BluRay.x264-GROUP');
+      const query = parser.buildSearchQuery(parsed);
+      
+      assert.ok(query.includes('Movie Name'));
+      assert.ok(query.includes('2023'));
+    });
 
-      assert.deepStrictEqual(removed, ['B']);
+    it('should return falsy title for unparseable filenames', () => {
+      const parsed = parser.parse('');
+      assert.ok(!parsed.title, 'title should be falsy for empty input');
     });
   });
 
-  describe('Cinemeta matching', () => {
-    it('should score exact title match highest', () => {
-      const queryLower = 'movie name';
-      const meta = { name: 'Movie Name' };
+  describe('season pack file detection', () => {
+    it('should parse episode info from filenames', () => {
+      const result = parser.parseEpisodeFromFilename('Show.S01E03.720p.mkv');
       
-      // Exact match should score 1.0
-      const nameLower = meta.name.toLowerCase();
-      const score = nameLower === queryLower ? 1.0 : 0;
-      
-      assert.strictEqual(score, 1.0);
+      assert.strictEqual(result.season, 1);
+      assert.strictEqual(result.episode, 3);
     });
 
-    it('should give bonus for year match', () => {
-      const query = 'movie name 2023';
-      const meta = { name: 'Movie Name', year: 2023 };
-      
-      const yearMatch = query.match(/\b(19|20)\d{2}\b/);
-      const yearBonus = yearMatch && parseInt(yearMatch[0]) === meta.year ? 0.2 : 0;
-      
-      assert.strictEqual(yearBonus, 0.2);
-    });
-
-    it('should reject low confidence matches', () => {
-      const minConfidence = 0.5;
-      const scores = [0.3, 0.4, 0.49];
-      
-      for (const score of scores) {
-        assert.ok(score < minConfidence, `Score ${score} should be below threshold`);
-      }
+    it('should return null for non-episode files', () => {
+      const result = parser.parseEpisodeFromFilename('random_file.mkv');
+      assert.strictEqual(result, null);
     });
   });
 
-  describe('Season pack handling', () => {
-    it('should parse episode info from files', () => {
-      const files = [
-        { path: 'Show.S01E01.mkv' },
-        { path: 'Show.S01E02.mkv' },
-        { path: 'Show.S01E03.mkv' },
-      ];
-
-      const parsed = files.map(f => {
-        const match = /S(\d+)E(\d+)/i.exec(f.path);
-        return match ? { season: parseInt(match[1]), episode: parseInt(match[2]) } : null;
-      });
-
-      assert.strictEqual(parsed.length, 3);
-      assert.strictEqual(parsed[0].episode, 1);
-      assert.strictEqual(parsed[2].episode, 3);
-    });
-  });
-
-  describe('Resume support', () => {
-    it('should track sync offset', () => {
-      const syncState = new Map();
-      
-      syncState.set('sync_offset', '500');
-      assert.strictEqual(syncState.get('sync_offset'), '500');
-      
-      syncState.set('sync_offset', '600');
-      assert.strictEqual(syncState.get('sync_offset'), '600');
+  describe('subtitle detection', () => {
+    it('should detect subtitle files', () => {
+      assert.strictEqual(parser.isSubtitleFile('movie.en.srt'), true);
+      assert.strictEqual(parser.isSubtitleFile('movie.vtt'), true);
+      assert.strictEqual(parser.isSubtitleFile('movie.ass'), true);
+      assert.strictEqual(parser.isSubtitleFile('movie.mkv'), false);
     });
 
-    it('should clear offset on completion', () => {
-      const syncState = new Map();
-      syncState.set('sync_offset', '1000');
-      syncState.set('initial_sync_complete', 'true');
-      syncState.delete('sync_offset');
-      
-      assert.strictEqual(syncState.has('sync_offset'), false);
-      assert.strictEqual(syncState.get('initial_sync_complete'), 'true');
+    it('should parse subtitle language info', () => {
+      const info = parser.parseSubtitleInfo('movie.english.srt');
+      assert.ok(info.format);
     });
   });
 });

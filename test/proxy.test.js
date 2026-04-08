@@ -121,47 +121,6 @@ describe('proxy', () => {
     });
   });
 
-  describe('Range header handling', () => {
-    it('parses Range header correctly', () => {
-      const rangeHeader = 'bytes=0-1023';
-      const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
-      
-      assert.ok(match);
-      assert.strictEqual(match[1], '0');
-      assert.strictEqual(match[2], '1023');
-    });
-
-    it('handles open-ended Range', () => {
-      const rangeHeader = 'bytes=1024-';
-      const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
-      
-      assert.ok(match);
-      assert.strictEqual(match[1], '1024');
-      assert.strictEqual(match[2], '');
-    });
-  });
-
-  describe('Response headers', () => {
-    it('includes required CORS headers', () => {
-      const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-        'Access-Control-Allow-Headers': 'Range, Accept, Content-Type',
-        'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length, Content-Type',
-        'Access-Control-Allow-Credentials': 'false',
-      };
-
-      assert.strictEqual(corsHeaders['Access-Control-Allow-Origin'], '*');
-      assert.strictEqual(corsHeaders['Access-Control-Allow-Credentials'], 'false');
-      assert.ok(corsHeaders['Access-Control-Allow-Headers'].includes('Range'));
-    });
-
-    it('includes Accept-Ranges header', () => {
-      const responseHeaders = { 'Accept-Ranges': 'bytes' };
-      assert.strictEqual(responseHeaders['Accept-Ranges'], 'bytes');
-    });
-  });
-
   describe('MIME type detection', () => {
     it('returns application/x-subrip for .srt files', () => {
       assert.strictEqual(getMimeType('movie.en.srt'), 'application/x-subrip');
