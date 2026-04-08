@@ -7,6 +7,8 @@ import * as rd from '../realdebrid.js';
 import * as proxy from '../proxy.js';
 import * as db from '../db.js';
 import * as library from '../library.js';
+import * as settings from '../settings.js';
+import * as stremio from '../stremio.js';
 import * as validators from '../validators.js';
 import config from '../config.js';
 import { ErrorCode, createErrorResponse } from '../errors.js';
@@ -315,5 +317,40 @@ export function toggleBandwidthModeHandler(req, res) {
   res.json({
     enabled,
     message: enabled ? 'Low bandwidth mode enabled (480p transcoding)' : 'Low bandwidth mode disabled (full quality)',
+  });
+}
+
+/**
+ * Get settings handler
+ * Returns current settings with metadata
+ */
+export function getSettingsHandler(req, res) {
+  const allSettings = settings.getAll();
+  const metadata = settings.getMetadata();
+
+  res.json({
+    settings: allSettings,
+    metadata,
+  });
+}
+
+/**
+ * Update settings handler
+ * Updates settings and clears cache when transcoding changes
+ */
+export function updateSettingsHandler(req, res) {
+  const result = settings.updateMany(req.body);
+
+  // If transcodingEnabled was changed, clear the URL cache
+  // so the new setting takes effect immediately
+  if (result.updated && 'transcodingEnabled' in result.updated) {
+    stremio.clearUrlCache?.();
+  }
+
+  res.json({
+    success: result.errors.length === 0,
+    updated: result.updated,
+    errors: result.errors,
+    message: result.errors.length === 0 ? 'All settings updated successfully' : 'Some settings failed to update',
   });
 }

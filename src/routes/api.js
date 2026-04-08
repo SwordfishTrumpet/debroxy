@@ -26,6 +26,8 @@ import {
   getHistoryStatsHandler,
   markCompleteHandler,
   toggleBandwidthModeHandler,
+  getSettingsHandler,
+  updateSettingsHandler,
 } from '../handlers/api.js';
 
 /**
@@ -97,4 +99,8 @@ export function registerApiRoutes(app, { tokenAuth, createTimeoutMiddleware, pre
 
   // Toggle low bandwidth mode
   app.post(`${p}/api/bandwidth-mode`, auth, asyncHandler(toggleBandwidthModeHandler));
+
+  // Settings endpoints
+  app.get(`${p}/api/settings`, auth, asyncHandler(getSettingsHandler));
+  app.post(`${p}/api/settings`, auth, asyncHandler(updateSettingsHandler));
 }

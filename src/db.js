@@ -204,6 +204,13 @@ CREATE TABLE IF NOT EXISTS low_bandwidth_mode (
     enabled INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
 );
+
+-- User settings table: stores runtime-configurable user settings
+CREATE TABLE IF NOT EXISTS user_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 `;
 
 // Initialize schema
@@ -477,6 +484,17 @@ const statements = {
       updated_at = excluded.updated_at
   `),
   getAllLowBandwidthModes: db.prepare('SELECT * FROM low_bandwidth_mode WHERE enabled = 1'),
+
+  // User settings statements
+  getUserSetting: db.prepare('SELECT value FROM user_settings WHERE key = ?'),
+  setUserSetting: db.prepare(`
+    INSERT INTO user_settings (key, value, updated_at)
+    VALUES (@key, @value, @updated_at)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `),
+  getAllUserSettings: db.prepare('SELECT key, value FROM user_settings'),
 };
 
 /**
@@ -981,6 +999,43 @@ export function setLowBandwidthMode(clientIp, enabled) {
     updated_at: Date.now(),
   });
   log.info({ clientIp, enabled }, 'Low bandwidth mode ' + (enabled ? 'enabled' : 'disabled'));
+}
+
+/**
+ * Get a user setting value
+ * @param {string} key - Setting key
+ * @returns {string|null} Setting value or null if not set
+ */
+export function getUserSetting(key) {
+  const row = statements.getUserSetting.get(key);
+  return row ? row.value : null;
+}
+
+/**
+ * Set a user setting value
+ * @param {string} key - Setting key
+ * @param {string} value - Setting value
+ */
+export function setUserSetting(key, value) {
+  statements.setUserSetting.run({
+    key,
+    value: String(value),
+    updated_at: Date.now(),
+  });
+  log.debug({ key }, 'User setting updated');
+}
+
+/**
+ * Get all user settings as an object
+ * @returns {Object} Object with key-value pairs
+ */
+export function getAllUserSettings() {
+  const rows = statements.getAllUserSettings.all();
+  const result = {};
+  for (const row of rows) {
+    result[row.key] = row.value;
+  }
+  return result;
 }
 
 /**

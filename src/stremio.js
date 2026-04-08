@@ -251,6 +251,14 @@ const catalogCache = new LRUCache({
 });
 
 /**
+ * Clear the URL cache
+ * Called when transcoding settings change to ensure new settings take effect immediately
+ */
+export function clearUrlCache() {
+  urlCache.clear();
+}
+
+/**
  * Fetch and store files for a season pack (lazy loading)
  * @param {string} rdTorrentId - RD torrent ID
  * @returns {Promise<Array>} Array of file objects
@@ -1081,4 +1089,5 @@ export default {
   decodeStreamInfo,
   getStreamUrl,
   getSubtitleUrl,
+  clearUrlCache,
 };
