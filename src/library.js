@@ -329,6 +329,29 @@ async function storeSeasonPackFiles(rdTorrentId) {
     if (files.length > 0) {
       db.insertFiles(rdTorrentId, files);
     }
+
+    // Detect and store subtitle files (separately from video file index mapping)
+    const subtitleFiles = info.files.filter(f => parser.isSubtitleFile(f.path));
+    if (subtitleFiles.length > 0) {
+      const subs = subtitleFiles.map(file => {
+        const subInfo = parser.parseSubtitleInfo(file.path);
+        const episodeInfo = parser.parseEpisodeFromFilename(file.path);
+        return {
+          rd_file_id: file.id,
+          filename: file.path,
+          filesize: file.bytes,
+          link: null, // Links resolved at play time via getSubtitleUrl
+          language: subInfo.language,
+          language_code: subInfo.languageCode,
+          format: subInfo.format,
+          season: episodeInfo?.season || null,
+          episode: episodeInfo?.episode || null,
+        };
+      });
+      db.insertSubtitleFiles(rdTorrentId, subs);
+      log.debug({ rdTorrentId, subtitleCount: subs.length }, 'Indexed subtitle files');
+    }
+
     return files.length;
   } catch (error) {
     log.debug({ rdTorrentId, error: error.message }, 'Failed to fetch season pack files');
@@ -645,7 +668,9 @@ async function incrementalSync() {
 
     for (const rdId of indexedIds) {
       if (!currentIds.has(rdId)) {
-        db.removeTorrent(rdId, null);
+        // Get imdb_id before removing for orphan cleanup
+        const imdbId = db.getImdbIdByRdId(rdId);
+        db.removeTorrent(rdId, imdbId);
         db.removeUnmatched(rdId);
         removed++;
       }
@@ -660,6 +685,18 @@ async function incrementalSync() {
     loadAllSeasonPackFiles().catch(err => 
       log.error({ error: err.message }, 'Background file loading failed'),
     );
+
+    // Mark completed items based on threshold
+    const completedCount = db.markCompletedByThreshold(config.watchCompletionThreshold);
+    if (completedCount > 0) {
+      log.info({ completedCount, threshold: config.watchCompletionThreshold }, 'Marked items as completed');
+    }
+
+    // Clean up old completed watch history entries
+    const cleanedCount = db.cleanupOldWatchHistory(90);
+    if (cleanedCount > 0) {
+      log.info({ cleanedCount }, 'Cleaned up old watch history entries');
+    }
   } catch (error) {
     log.error({ error: error.message }, 'Incremental sync failed');
   } finally {
@@ -704,6 +741,12 @@ export async function initialize() {
   } else {
     // Run incremental sync on startup
     await incrementalSync();
+  }
+
+  // Mark completed items on startup
+  const completedCount = db.markCompletedByThreshold(config.watchCompletionThreshold);
+  if (completedCount > 0) {
+    log.info({ completedCount }, 'Marked items as completed on startup');
   }
 
   startSyncTimer();

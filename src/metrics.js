@@ -161,8 +161,8 @@ export function updateLibraryMetrics(stats) {
   syncStatus.set(stats.isComplete ? 1 : 0);
   
   // Defensive: ensure lastSync is valid before creating Date
-  if (stats.lastSync && !isNaN(new Date(stats.lastSync).getTime())) {
-    lastSyncTimestamp.set(new Date(stats.lastSync).getTime() / 1000);
+  if (stats.lastSync && !isNaN(Number(stats.lastSync))) {
+    lastSyncTimestamp.set(Number(stats.lastSync) / 1000);
   }
 }
 

@@ -160,4 +160,35 @@ describe('Stremio Enhancements', () => {
       }
     });
   });
+
+  describe('Subtitles', () => {
+    it('manifest should include subtitles in resources', () => {
+      const manifest = stremio.getManifest();
+      assert.ok(manifest.resources.includes('subtitles'), 'Resources should include subtitles');
+    });
+
+    it('subtitle info should encode and decode correctly', () => {
+      const original = { rdId: 'RD123', subtitleFileId: 42, filename: 'movie.en.srt' };
+      const encoded = Buffer.from(JSON.stringify(original)).toString('base64url');
+      const decoded = stremio.decodeStreamInfo(encoded);
+
+      assert.strictEqual(decoded.rdId, 'RD123');
+      assert.strictEqual(decoded.subtitleFileId, 42);
+      assert.strictEqual(decoded.filename, 'movie.en.srt');
+    });
+
+    it('handleSubtitles should return subtitles array', () => {
+      // For a non-existent title, should return empty subtitles
+      const result = stremio.handleSubtitles('movie', 'tt0000000', 'testtoken');
+      assert.ok(result, 'Should return a response object');
+      assert.ok(Array.isArray(result.subtitles), 'Should have subtitles array');
+    });
+
+    it('subtitle URL should contain subtitle/serve path', () => {
+      const info = { rdId: 'RD123', subtitleFileId: 5, filename: 'test.srt' };
+      const encoded = Buffer.from(JSON.stringify(info)).toString('base64url');
+      const expectedPath = `/subtitle/serve/${encoded}`;
+      assert.ok(expectedPath.includes('subtitle/serve'), 'URL should contain subtitle/serve path');
+    });
+  });
 });

@@ -13,7 +13,7 @@ process.env.LOG_LEVEL = 'silent';
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { validateUrl, getActiveStreams, getStreamCount } from '../src/proxy.js';
+import { validateUrl, getActiveStreams, getStreamCount, getMimeType } from '../src/proxy.js';
 
 describe('proxy', () => {
   describe('validateUrl', () => {
@@ -159,6 +159,44 @@ describe('proxy', () => {
     it('includes Accept-Ranges header', () => {
       const responseHeaders = { 'Accept-Ranges': 'bytes' };
       assert.strictEqual(responseHeaders['Accept-Ranges'], 'bytes');
+    });
+  });
+
+  describe('MIME type detection', () => {
+    it('returns application/x-subrip for .srt files', () => {
+      assert.strictEqual(getMimeType('movie.en.srt'), 'application/x-subrip');
+    });
+
+    it('returns text/vtt for .vtt files', () => {
+      assert.strictEqual(getMimeType('subs.vtt'), 'text/vtt');
+    });
+
+    it('returns text/x-ssa for .ass files', () => {
+      assert.strictEqual(getMimeType('movie.ass'), 'text/x-ssa');
+    });
+
+    it('returns text/x-ssa for .ssa files', () => {
+      assert.strictEqual(getMimeType('movie.ssa'), 'text/x-ssa');
+    });
+
+    it('returns text/plain for .sub files', () => {
+      assert.strictEqual(getMimeType('movie.sub'), 'text/plain');
+    });
+
+    it('returns video/mp4 for .mp4 files (regression)', () => {
+      assert.strictEqual(getMimeType('movie.mp4'), 'video/mp4');
+    });
+
+    it('returns video/x-matroska for .mkv files (regression)', () => {
+      assert.strictEqual(getMimeType('movie.mkv'), 'video/x-matroska');
+    });
+
+    it('returns video/x-msvideo for .avi files (regression)', () => {
+      assert.strictEqual(getMimeType('movie.avi'), 'video/x-msvideo');
+    });
+
+    it('returns fallback for unknown extensions', () => {
+      assert.strictEqual(getMimeType('file.xyz'), 'video/mp4');
     });
   });
 });

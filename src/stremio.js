@@ -12,6 +12,7 @@ import { getCinemetaMeta, getStatus as getLibraryStatus } from './library.js';
 import config from './config.js';
 import { createLogger } from './logger.js';
 import { validateRdId, validateGenre, validateYear, validateSort, VALID_GENRES, VALID_SORTS } from './validators.js';
+import { VERSION } from './constants.js';
 
 const log = createLogger('stremio');
 
@@ -82,8 +83,18 @@ const QUALITY_TAGS = {
 };
 
 /**
+ * Pre-computed quality priorities for O(1)-style lookup
+ * Ordered from highest to lowest score so we can return on first match
+ */
+const QUALITY_PRIORITY = [
+  '2160p', '4k', 'uhd', '1440p', '1080p', '720p', '576p', '480p', '360p',
+];
+
+const SOURCE_PRIORITY = ['bluray', 'blu-ray', 'web-dl', 'webdl', 'webrip', 'hdtv', 'dvd'];
+
+/**
  * Quality score for sorting (higher = better quality)
- * Uses pre-computed Map for O(1) lookups
+ * Uses priority array for early-exit on first match
  * @param {string} quality - Quality string (4K, 2160p, 1080p, etc.)
  * @returns {number} Quality score
  */
@@ -93,10 +104,19 @@ function getQualityScore(quality) {
   
   let score = 0;
   
-  // Check for matches in the quality map
-  for (const [key, value] of qualityScoreMap) {
+  // Resolution: return on first match (highest priority first)
+  for (const key of QUALITY_PRIORITY) {
     if (q.includes(key)) {
-      score = Math.max(score, value);
+      score = qualityScoreMap.get(key);
+      break;
+    }
+  }
+  
+  // Source bonus: additive, return on first match
+  for (const key of SOURCE_PRIORITY) {
+    if (q.includes(key)) {
+      score += qualityScoreMap.get(key);
+      break;
     }
   }
   
@@ -105,36 +125,44 @@ function getQualityScore(quality) {
 
 /**
  * Codec score for sorting within same quality
- * Uses pre-computed Map for O(1) lookups
+ * Uses pre-computed Map with early-exit on first match
  * @param {string} codec - Codec string (x264, x265, HEVC, etc.)
  * @returns {number} Codec preference score
  */
 function getCodecScore(codec) {
   if (!codec) return 0;
   const c = codec.toLowerCase();
-  
-  for (const [key, value] of codecScoreMap) {
-    if (c.includes(key)) return value;
-  }
-  
-  return 0;
+  return codecScoreMap.get(c) || 0;
 }
 
 /**
  * HDR score bonus
- * Uses pre-computed Map for O(1) lookups
+ * Uses pre-computed Map with early-exit on first match
  * @param {string} hdr - HDR string
  * @returns {number} HDR score bonus
  */
 function getHdrScore(hdr) {
   if (!hdr) return 0;
   const h = hdr.toLowerCase();
+  return hdrScoreMap.get(h) || 0;
+}
+
+/**
+ * Format seconds as duration string (HH:MM:SS or MM:SS)
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted duration
+ */
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return '0:00';
   
-  for (const [key, value] of hdrScoreMap) {
-    if (h.includes(key)) return value;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
-  
-  return 0;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -279,6 +307,28 @@ async function fetchAndStoreSeasonPackFiles(rdTorrentId) {
       log.debug({ rdTorrentId, fileCount: files.length }, 'Lazy-loaded season pack files');
     }
 
+    // Detect and store subtitle files (separately from video file index mapping)
+    const subtitleFiles = info.files.filter(f => parser.isSubtitleFile(f.path));
+    if (subtitleFiles.length > 0) {
+      const subs = subtitleFiles.map(file => {
+        const subInfo = parser.parseSubtitleInfo(file.path);
+        const episodeInfo = parser.parseEpisodeFromFilename(file.path);
+        return {
+          rd_file_id: file.id,
+          filename: file.path,
+          filesize: file.bytes,
+          link: null, // Links resolved at play time via getSubtitleUrl
+          language: subInfo.language,
+          language_code: subInfo.languageCode,
+          format: subInfo.format,
+          season: episodeInfo?.season || null,
+          episode: episodeInfo?.episode || null,
+        };
+      });
+      db.insertSubtitleFiles(rdTorrentId, subs);
+      log.debug({ rdTorrentId, subtitleCount: subs.length }, 'Lazy-loaded subtitle files');
+    }
+
     return files;
   } catch (error) {
     log.debug({ rdTorrentId, error: error.message }, 'Failed to fetch season pack files');
@@ -302,7 +352,7 @@ export function getManifest() {
   
   return {
     id: 'com.debroxy.stremio',
-    version: '1.1.0',
+    version: VERSION,
     name: `Debroxy${syncSuffix}`,
     description: 'Browse and stream your Real-Debrid torrent library with quality filtering, smart sorting, and enhanced metadata. Streams are proxied through your server for privacy.',
     catalogs: [
@@ -332,8 +382,22 @@ export function getManifest() {
         ],
         extraSupported: ['skip', 'search', 'genre', 'year', 'sort'],
       },
+      {
+        type: 'movie',
+        id: 'debroxy-continue-movies',
+        name: 'Continue Watching Movies',
+        extra: [{ name: 'skip' }],
+        extraSupported: ['skip'],
+      },
+      {
+        type: 'series',
+        id: 'debroxy-continue-series',
+        name: 'Continue Watching Series',
+        extra: [{ name: 'skip' }],
+        extraSupported: ['skip'],
+      },
     ],
-    resources: ['catalog', 'meta', 'stream'],
+    resources: ['catalog', 'meta', 'stream', 'subtitles'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
     behaviorHints: {
@@ -354,6 +418,38 @@ export function handleCatalog(type, id, extra = {}) {
   const skip = parseInt(extra.skip) || 0;
   const search = extra.search || null;
   const limit = 100;
+
+  // Handle Continue Watching catalogs
+  if (id === 'debroxy-continue-movies' || id === 'debroxy-continue-series') {
+    const catalogType = id === 'debroxy-continue-movies' ? 'movie' : 'series';
+    const items = db.getContinueWatching(catalogType, skip, limit);
+    
+    const metas = items.map(item => {
+      const meta = {
+        id: item.imdb_id,
+        type: item.type,
+        name: item.name,
+      };
+      
+      if (item.poster) meta.poster = item.poster;
+      if (item.year) meta.year = item.year;
+      
+      // Add progress info to description
+      const progressPercent = Math.round(item.percent_watched * 100);
+      const progressTime = formatDuration(item.progress_seconds);
+      meta.description = `Continue watching: ${progressPercent}% complete (${progressTime})`;
+      
+      // For series episodes, include season/episode in name
+      if (item.type === 'series' && item.season && item.episode) {
+        meta.name = `${item.name} S${item.season}E${item.episode}`;
+        meta.id = `${item.imdb_id}:${item.season}:${item.episode}`;
+      }
+      
+      return meta;
+    });
+    
+    return { metas };
+  }
 
   // Validate and extract genre filter
   const genre = extra.genre && validateGenre(extra.genre) ? extra.genre : null;
@@ -492,7 +588,7 @@ export async function handleMeta(type, id) {
  * @param {number} [params.fileId] - Optional file ID for multi-file torrents
  * @returns {Object} Stream entry object
  */
-function createStreamEntry({ rdId, filename, filesize, urlPrefix, torrent, score, fileId }) {
+function createStreamEntry({ rdId, filename, filesize, urlPrefix, torrent, score, fileId, subtitles }) {
   const streamInfo = encodeStreamInfo({
     rdId,
     fileId,
@@ -524,7 +620,7 @@ function createStreamEntry({ rdId, filename, filesize, urlPrefix, torrent, score
       filename: filename,
       videoSize: filesize || undefined,
     },
-    subtitles: [],
+    subtitles: subtitles || [],
   };
 
   // Add quality tag for Stremio's quality filter
@@ -632,6 +728,16 @@ export async function handleStream(type, id, token) {
   const result = [];
   const minQuality = getMinQualityThreshold();
 
+  // Query subtitles for this title/episode and group by torrent
+  const allSubtitles = db.getSubtitlesForTitle(imdbId, season, episode);
+  const subtitlesByTorrent = new Map();
+  for (const sub of allSubtitles) {
+    if (!subtitlesByTorrent.has(sub.rd_torrent_id)) {
+      subtitlesByTorrent.set(sub.rd_torrent_id, []);
+    }
+    subtitlesByTorrent.get(sub.rd_torrent_id).push(sub);
+  }
+
   for (const [rdId, data] of torrentMap) {
     const { torrent, files } = data;
     
@@ -640,6 +746,14 @@ export async function handleStream(type, id, token) {
       log.debug({ rdId, quality: torrent.quality, minQuality }, 'Stream filtered by minimum quality');
       continue;
     }
+
+    // Build subtitle entries for this torrent
+    const torrentSubs = subtitlesByTorrent.get(rdId) || [];
+    const subtitles = torrentSubs.map(sub => ({
+      id: `debroxy-sub-${sub.id}`,
+      url: `${urlPrefix}/subtitle/serve/${encodeStreamInfo({ rdId, subtitleFileId: sub.rd_file_id, filename: sub.filename })}`,
+      lang: sub.language || sub.language_code || 'Unknown',
+    }));
 
     // For season packs, create stream for each matching episode file
     if (files.length > 0 && type === 'series') {
@@ -657,6 +771,7 @@ export async function handleStream(type, id, token) {
           torrent,
           score: file.score,
           fileId: file.rd_file_id,
+          subtitles,
         });
         result.push(streamEntry);
       }
@@ -669,6 +784,7 @@ export async function handleStream(type, id, token) {
         urlPrefix,
         torrent,
         score: data.score,
+        subtitles,
       });
       result.push(streamEntry);
     }
@@ -677,6 +793,17 @@ export async function handleStream(type, id, token) {
   // Sort by score (highest first) and remove score property
   result.sort((a, b) => b._score - a._score);
   result.forEach(s => delete s._score);
+
+  // Add resume hints to stream titles if watch progress exists
+  const watchProgress = db.getWatchProgress(imdbId, season, episode);
+  if (watchProgress && !watchProgress.is_completed && watchProgress.percent_watched > 0.01) {
+    const resumeTime = formatDuration(watchProgress.progress_seconds);
+    const progressPercent = Math.round(watchProgress.percent_watched * 100);
+    
+    for (const stream of result) {
+      stream.title = `▶ Resume from ${resumeTime} (${progressPercent}%)\n${stream.title}`;
+    }
+  }
 
   log.debug({ imdbId, season, episode, count: result.length, filtered: streams.length - result.length }, 'Streams found');
 
@@ -776,11 +903,119 @@ export async function getStreamUrl(streamInfo) {
   return result;
 }
 
+/**
+ * Handle subtitles resource request (Stremio subtitles protocol)
+ * @param {string} type - 'movie' or 'series'
+ * @param {string} id - IMDB ID (format: tt1234567 or tt1234567:1:2 for series)
+ * @param {string} token - Auth token for URL generation (use '_' when auth disabled)
+ * @returns {Object} Subtitles response { subtitles: [...] }
+ */
+export function handleSubtitles(type, id, token) {
+  const urlPrefix = config.authEnabled ? `${config.externalUrl}/${token}` : config.externalUrl;
+  const [imdbId, seasonStr, episodeStr] = id.split(':');
+  const season = seasonStr && /^\d+$/.test(seasonStr) ? parseInt(seasonStr, 10) : null;
+  const episode = episodeStr && /^\d+$/.test(episodeStr) ? parseInt(episodeStr, 10) : null;
+
+  const allSubtitles = db.getSubtitlesForTitle(imdbId, season, episode);
+
+  const subtitles = allSubtitles.map(sub => ({
+    id: `debroxy-sub-${sub.id}`,
+    url: `${urlPrefix}/subtitle/serve/${encodeStreamInfo({ rdId: sub.rd_torrent_id, subtitleFileId: sub.rd_file_id, filename: sub.filename })}`,
+    lang: sub.language || sub.language_code || 'Unknown',
+  }));
+
+  log.debug({ imdbId, season, episode, count: subtitles.length }, 'Subtitles request');
+
+  return { subtitles };
+}
+
+/**
+ * Get unrestricted download URL for a subtitle file
+ * Applies the same selected-file filtering as getStreamUrl.
+ * Returns null gracefully if the subtitle file was not selected in RD.
+ * @param {Object} subtitleInfo - Decoded subtitle info { rdId, subtitleFileId, filename }
+ * @returns {Promise<Object|null>} { url, filename, mimeType } or null if not available
+ */
+export async function getSubtitleUrl(subtitleInfo) {
+  if (!subtitleInfo?.rdId || !validateRdId(subtitleInfo.rdId)) {
+    throw Object.assign(new Error('Invalid RD torrent ID'), {
+      status: 400,
+      errorCode: 'VALIDATION_ERROR',
+    });
+  }
+
+  if (!subtitleInfo.subtitleFileId) {
+    throw Object.assign(new Error('Missing subtitle file ID'), {
+      status: 400,
+      errorCode: 'VALIDATION_ERROR',
+    });
+  }
+
+  const cacheKey = `sub:${subtitleInfo.rdId}:${subtitleInfo.subtitleFileId}`;
+
+  // Check cache first
+  const cached = urlCache.get(cacheKey);
+  if (cached) {
+    log.debug({ cacheKey }, 'Using cached subtitle URL');
+    return cached;
+  }
+
+  // Get torrent info to find the link
+  const torrent = await rd.getTorrentInfo(subtitleInfo.rdId);
+
+  if (!torrent || !torrent.links || torrent.links.length === 0) {
+    return null; // No links available, graceful return
+  }
+
+  if (!torrent.files) {
+    return null;
+  }
+
+  // Find the subtitle file in the files array
+  const file = torrent.files.find(f => f.id === subtitleInfo.subtitleFileId);
+  if (!file) {
+    log.debug({ rdId: subtitleInfo.rdId, fileId: subtitleInfo.subtitleFileId }, 'Subtitle file not found in torrent');
+    return null;
+  }
+
+  // Find index among SELECTED files only (links[] matches selected files, not all files)
+  const selectedFiles = torrent.files.filter(f => f.selected === 1);
+  const selectedIndex = selectedFiles.findIndex(f => f.id === subtitleInfo.subtitleFileId);
+  if (selectedIndex === -1) {
+    // Subtitle file was not selected for download in RD — graceful null return
+    log.debug({ rdId: subtitleInfo.rdId, fileId: subtitleInfo.subtitleFileId }, 'Subtitle file not selected in RD');
+    return null;
+  }
+
+  const link = torrent.links[selectedIndex];
+  if (!link) {
+    log.debug({ rdId: subtitleInfo.rdId, selectedIndex }, 'No link for subtitle at selected index');
+    return null;
+  }
+
+  // Unrestrict the link
+  const unrestricted = await rd.unrestrict(link);
+
+  const result = {
+    url: unrestricted.download,
+    filename: unrestricted.filename,
+    mimeType: unrestricted.mimeType,
+  };
+
+  // Cache the result
+  urlCache.set(cacheKey, result);
+  log.debug({ cacheKey, filename: result.filename }, 'Subtitle URL unrestricted and cached');
+
+  return result;
+}
+
 export default {
   getManifest,
   handleCatalog,
   handleMeta,
   handleStream,
+  handleSubtitles,
   decodeStreamInfo,
   getStreamUrl,
+  getSubtitleUrl,
 };

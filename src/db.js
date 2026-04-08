@@ -128,6 +128,21 @@ CREATE TABLE IF NOT EXISTS torrent_files (
     episode INTEGER
 );
 
+-- Subtitle files table: subtitle files within torrents
+CREATE TABLE IF NOT EXISTS subtitle_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rd_torrent_id TEXT NOT NULL REFERENCES torrents(rd_id) ON DELETE CASCADE,
+    rd_file_id INTEGER,
+    filename TEXT NOT NULL,
+    filesize INTEGER,
+    link TEXT,
+    language TEXT,
+    language_code TEXT,
+    format TEXT NOT NULL,
+    season INTEGER,
+    episode INTEGER
+);
+
 -- Unmatched table: torrents that couldn't be identified
 CREATE TABLE IF NOT EXISTS unmatched (
     rd_id TEXT PRIMARY KEY,
@@ -140,6 +155,23 @@ CREATE TABLE IF NOT EXISTS unmatched (
 CREATE TABLE IF NOT EXISTS sync_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+-- Watch history table: tracks playback progress
+CREATE TABLE IF NOT EXISTS watch_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    imdb_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('movie', 'series')),
+    season INTEGER,
+    episode INTEGER,
+    progress_seconds REAL NOT NULL DEFAULT 0,
+    duration_seconds REAL,
+    percent_watched REAL NOT NULL DEFAULT 0,
+    is_completed INTEGER NOT NULL DEFAULT 0,
+    watch_count INTEGER NOT NULL DEFAULT 1,
+    last_watched_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(imdb_id, season, episode)
 );
 
 -- Indexes for performance with 50K+ torrents
@@ -155,8 +187,16 @@ CREATE INDEX IF NOT EXISTS idx_torrents_season_ep ON torrents(season, episode);
 CREATE INDEX IF NOT EXISTS idx_torrent_files_torrent ON torrent_files(rd_torrent_id);
 CREATE INDEX IF NOT EXISTS idx_torrent_files_episode ON torrent_files(season, episode);
 
+CREATE INDEX IF NOT EXISTS idx_subtitle_files_torrent ON subtitle_files(rd_torrent_id);
+CREATE INDEX IF NOT EXISTS idx_subtitle_files_episode ON subtitle_files(season, episode);
+
 CREATE INDEX IF NOT EXISTS idx_unmatched_added ON unmatched(added_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_state_key ON sync_state(key);
+
+-- Watch history indexes
+CREATE INDEX IF NOT EXISTS idx_watch_history_imdb ON watch_history(imdb_id);
+CREATE INDEX IF NOT EXISTS idx_watch_history_last_watched ON watch_history(last_watched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_watch_history_continue ON watch_history(is_completed, last_watched_at DESC);
 `;
 
 // Initialize schema
@@ -176,8 +216,7 @@ const statements = {
       description = excluded.description,
       genres = excluded.genres,
       imdb_rating = excluded.imdb_rating,
-      updated_at = excluded.updated_at,
-      added_at = excluded.added_at
+      updated_at = excluded.updated_at
   `),
 
   upsertTorrent: db.prepare(`
@@ -203,6 +242,33 @@ const statements = {
   `),
 
   deleteFilesByTorrent: db.prepare('DELETE FROM torrent_files WHERE rd_torrent_id = ?'),
+
+  insertSubtitleFile: db.prepare(`
+    INSERT INTO subtitle_files (rd_torrent_id, rd_file_id, filename, filesize, link, language, language_code, format, season, episode)
+    VALUES (@rd_torrent_id, @rd_file_id, @filename, @filesize, @link, @language, @language_code, @format, @season, @episode)
+  `),
+
+  deleteSubtitleFilesByTorrent: db.prepare('DELETE FROM subtitle_files WHERE rd_torrent_id = ?'),
+
+  getSubtitlesForTitle: db.prepare(`
+    SELECT sf.*, t.imdb_id, t.filename as torrent_filename
+    FROM subtitle_files sf
+    JOIN torrents t ON t.rd_id = sf.rd_torrent_id
+    WHERE t.imdb_id = @imdb_id
+    AND (
+      @season IS NULL
+      OR sf.season = @season
+      OR sf.season IS NULL
+    )
+    AND (
+      @episode IS NULL
+      OR sf.episode = @episode
+      OR sf.episode IS NULL
+    )
+    ORDER BY sf.language ASC, sf.filename ASC
+  `),
+
+  getSubtitleById: db.prepare('SELECT * FROM subtitle_files WHERE id = ?'),
 
   removeTorrent: db.prepare('DELETE FROM torrents WHERE rd_id = ?'),
 
@@ -304,7 +370,9 @@ const statements = {
       (SELECT COUNT(*) FROM titles WHERE type = 'series') as series,
       (SELECT COUNT(*) FROM torrents) as torrents,
       (SELECT COUNT(*) FROM torrent_files) as files,
-      (SELECT COUNT(*) FROM unmatched) as unmatched
+      (SELECT COUNT(*) FROM subtitle_files) as subtitles,
+      (SELECT COUNT(*) FROM unmatched) as unmatched,
+      (SELECT COUNT(*) FROM watch_history) as watch_history
   `),
 
   cleanupOldUnmatched: db.prepare(`
@@ -322,6 +390,72 @@ const statements = {
       SELECT 1 FROM torrent_files tf WHERE tf.rd_torrent_id = t.rd_id
     )
   `),
+
+  // Watch history statements
+  upsertWatchProgress: db.prepare(`
+    INSERT INTO watch_history (imdb_id, type, season, episode, progress_seconds, duration_seconds, percent_watched, is_completed, watch_count, last_watched_at, created_at)
+    VALUES (@imdb_id, @type, @season, @episode, @progress_seconds, @duration_seconds, @percent_watched, @is_completed, @watch_count, @last_watched_at, @created_at)
+    ON CONFLICT(imdb_id, season, episode) DO UPDATE SET
+      progress_seconds = excluded.progress_seconds,
+      duration_seconds = COALESCE(excluded.duration_seconds, duration_seconds),
+      percent_watched = excluded.percent_watched,
+      is_completed = excluded.is_completed,
+      watch_count = CASE 
+        WHEN excluded.percent_watched < 0.1 AND percent_watched > 0.5 THEN watch_count + 1
+        ELSE watch_count
+      END,
+      last_watched_at = excluded.last_watched_at
+  `),
+
+  getWatchProgress: db.prepare('SELECT * FROM watch_history WHERE imdb_id = @imdb_id AND season IS @season AND episode IS @episode'),
+
+  getContinueWatching: db.prepare(`
+    SELECT wh.*, t.name, t.poster, t.year
+    FROM watch_history wh
+    JOIN titles t ON t.imdb_id = wh.imdb_id
+    WHERE wh.is_completed = 0
+    AND wh.percent_watched > 0.01
+    AND wh.type = @type
+    ORDER BY wh.last_watched_at DESC
+    LIMIT @limit OFFSET @skip
+  `),
+
+  getWatchHistory: db.prepare(`
+    SELECT wh.*, t.name, t.poster, t.year
+    FROM watch_history wh
+    JOIN titles t ON t.imdb_id = wh.imdb_id
+    WHERE (@type IS NULL OR wh.type = @type)
+    AND (@completed IS NULL OR wh.is_completed = @completed)
+    ORDER BY wh.last_watched_at DESC
+    LIMIT @limit OFFSET @skip
+  `),
+
+  getWatchHistoryCount: db.prepare(`
+    SELECT COUNT(*) as count
+    FROM watch_history wh
+    WHERE (@type IS NULL OR wh.type = @type)
+    AND (@completed IS NULL OR wh.is_completed = @completed)
+  `),
+
+  markWatchCompleted: db.prepare('UPDATE watch_history SET is_completed = 1 WHERE id = ?'),
+
+  markCompletedByThreshold: db.prepare('UPDATE watch_history SET is_completed = 1 WHERE percent_watched >= @threshold AND is_completed = 0'),
+
+  getWatchStats: db.prepare(`
+    SELECT
+      COUNT(*) as total_watched,
+      SUM(CASE WHEN type = 'movie' THEN 1 ELSE 0 END) as total_movies,
+      SUM(CASE WHEN type = 'series' THEN 1 ELSE 0 END) as total_series,
+      SUM(COALESCE(duration_seconds * percent_watched, 0)) as total_time_seconds,
+      AVG(percent_watched) as avg_completion
+    FROM watch_history
+  `),
+
+  cleanupOldWatchHistory: db.prepare('DELETE FROM watch_history WHERE is_completed = 1 AND last_watched_at < ?'),
+
+  deleteWatchProgress: db.prepare('DELETE FROM watch_history WHERE imdb_id = @imdb_id AND season IS @season AND episode IS @episode'),
+
+  getImdbIdByRdId: db.prepare('SELECT imdb_id FROM torrents WHERE rd_id = ?'),
 };
 
 /**
@@ -392,6 +526,59 @@ export function insertFiles(rdTorrentId, files) {
   });
 
   insertMany(files);
+}
+
+/**
+ * Insert subtitle files for a torrent
+ * @param {string} rdTorrentId - Parent torrent RD ID
+ * @param {Array} files - Array of subtitle file objects
+ */
+export function insertSubtitleFiles(rdTorrentId, files) {
+  // Delete existing subtitle files first
+  statements.deleteSubtitleFilesByTorrent.run(rdTorrentId);
+
+  const insertMany = db.transaction((files) => {
+    for (const file of files) {
+      statements.insertSubtitleFile.run({
+        rd_torrent_id: rdTorrentId,
+        rd_file_id: file.rd_file_id || null,
+        filename: file.filename,
+        filesize: file.filesize || null,
+        link: file.link || null,
+        language: file.language || null,
+        language_code: file.language_code || null,
+        format: file.format,
+        season: file.season || null,
+        episode: file.episode || null,
+      });
+    }
+  });
+
+  insertMany(files);
+}
+
+/**
+ * Get subtitles for a title
+ * @param {string} imdbId - IMDB ID
+ * @param {number|null} season - Season number (for series)
+ * @param {number|null} episode - Episode number (for series)
+ * @returns {Array} Array of subtitle objects
+ */
+export function getSubtitlesForTitle(imdbId, season = null, episode = null) {
+  return statements.getSubtitlesForTitle.all({
+    imdb_id: imdbId,
+    season,
+    episode,
+  });
+}
+
+/**
+ * Get a single subtitle by ID
+ * @param {number} id - Subtitle file ID
+ * @returns {Object|null} Subtitle object or null
+ */
+export function getSubtitleById(id) {
+  return statements.getSubtitleById.get(id);
 }
 
 /**
@@ -612,6 +799,139 @@ export function cleanupOldUnmatched(daysOld = 30) {
  */
 export function getSeasonPacksWithoutFiles() {
   return statements.getSeasonPacksWithoutFiles.all();
+}
+
+/**
+ * Upsert watch progress for a title
+ * @param {Object} progress - Progress data
+ * @returns {Object} Result with id
+ */
+export function upsertWatchProgress(progress) {
+  const now = Date.now();
+  const result = statements.upsertWatchProgress.run({
+    imdb_id: progress.imdb_id,
+    type: progress.type,
+    season: progress.season || null,
+    episode: progress.episode || null,
+    progress_seconds: progress.progress_seconds || 0,
+    duration_seconds: progress.duration_seconds || null,
+    percent_watched: progress.percent_watched || 0,
+    is_completed: progress.is_completed ? 1 : 0,
+    watch_count: progress.watch_count || 1,
+    last_watched_at: now,
+    created_at: progress.created_at || now,
+  });
+  return result;
+}
+
+/**
+ * Get watch progress for a specific title
+ * @param {string} imdbId - IMDB ID
+ * @param {number|null} season - Season number (null for movies)
+ * @param {number|null} episode - Episode number (null for movies)
+ * @returns {Object|null} Watch progress or null
+ */
+export function getWatchProgress(imdbId, season = null, episode = null) {
+  return statements.getWatchProgress.get({ imdb_id: imdbId, season, episode }) || null;
+}
+
+/**
+ * Get Continue Watching catalog items
+ * @param {string} type - 'movie' or 'series'
+ * @param {number} skip - Items to skip
+ * @param {number} limit - Max items
+ * @returns {Array} Array of watch history items with title info
+ */
+export function getContinueWatching(type, skip = 0, limit = 50) {
+  return statements.getContinueWatching.all({ type, skip, limit });
+}
+
+/**
+ * Get watch history with filters
+ * @param {Object} filters - Filter options
+ * @param {string|null} filters.type - 'movie', 'series', or null for all
+ * @param {boolean|null} filters.completed - true/false/null for all
+ * @param {number} filters.skip - Items to skip
+ * @param {number} filters.limit - Max items
+ * @returns {Object} { items: Array, total: number }
+ */
+export function getWatchHistory(filters = {}) {
+  const { type = null, completed = null, skip = 0, limit = 50 } = filters;
+  const completedValue = completed === null ? null : (completed ? 1 : 0);
+
+  const items = statements.getWatchHistory.all({ type, completed: completedValue, skip, limit });
+  const { count: total } = statements.getWatchHistoryCount.get({ type, completed: completedValue });
+
+  return { items, total };
+}
+
+/**
+ * Mark a watch history item as completed
+ * @param {number} id - Watch history ID
+ * @returns {Object} Result
+ */
+export function markWatchCompleted(id) {
+  return statements.markWatchCompleted.run(id);
+}
+
+/**
+ * Mark all items above threshold as completed
+ * @param {number} threshold - Percentage threshold (0.0 - 1.0)
+ * @returns {number} Number of items marked completed
+ */
+export function markCompletedByThreshold(threshold) {
+  const result = statements.markCompletedByThreshold.run({ threshold });
+  return result.changes;
+}
+
+/**
+ * Get watch statistics
+ * @returns {Object} Stats object
+ */
+export function getWatchStats() {
+  const stats = statements.getWatchStats.get();
+  return {
+    totalWatched: stats.total_watched || 0,
+    totalMovies: stats.total_movies || 0,
+    totalSeries: stats.total_series || 0,
+    totalTimeSeconds: stats.total_time_seconds || 0,
+    avgCompletion: stats.avg_completion || 0,
+  };
+}
+
+/**
+ * Clean up old completed watch history entries
+ * @param {number} daysOld - Delete entries older than this many days
+ * @returns {number} Number of deleted entries
+ */
+export function cleanupOldWatchHistory(daysOld = 90) {
+  const cutoff = Date.now() - (daysOld * 24 * 60 * 60 * 1000);
+  const result = statements.cleanupOldWatchHistory.run(cutoff);
+  if (result.changes > 0) {
+    log.info({ deleted: result.changes, daysOld }, 'Cleaned up old watch history entries');
+  }
+  return result.changes;
+}
+
+/**
+ * Get IMDB ID for a torrent by its RD ID
+ * @param {string} rdId - RD torrent ID
+ * @returns {string|null} IMDB ID or null
+ */
+export function getImdbIdByRdId(rdId) {
+  const row = statements.getImdbIdByRdId.get(rdId);
+  return row ? row.imdb_id : null;
+}
+
+/**
+ * Delete watch progress for a specific title
+ * @param {string} imdbId - IMDB ID
+ * @param {number|null} season - Season number
+ * @param {number|null} episode - Episode number
+ * @returns {Object} Result
+ */
+export function deleteWatchProgress(imdbId, season = null, episode = null) {
+  return statements.deleteWatchProgress.run({ imdb_id: imdbId, season, episode });
 }
 
 /**

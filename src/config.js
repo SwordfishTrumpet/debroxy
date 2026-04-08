@@ -38,6 +38,9 @@ function loadConfig() {
     // Only streams at or above this quality will be shown
     minStreamQuality: process.env.MIN_STREAM_QUALITY || null,
 
+    // Watch history settings
+    watchCompletionThreshold: parseFloat(process.env.WATCH_COMPLETION_THRESHOLD || '0.90'),
+
     // Derived
     isDev: process.env.NODE_ENV !== 'production',
   };
@@ -55,6 +58,12 @@ function loadConfig() {
 
   if (isNaN(config.syncIntervalMin) || config.syncIntervalMin < 1) {
     console.error('SYNC_INTERVAL_MIN must be a positive integer');
+    process.exit(1);
+  }
+
+  // Validate watch completion threshold
+  if (isNaN(config.watchCompletionThreshold) || config.watchCompletionThreshold < 0.5 || config.watchCompletionThreshold > 0.99) {
+    console.error('WATCH_COMPLETION_THRESHOLD must be between 0.5 and 0.99');
     process.exit(1);
   }
 

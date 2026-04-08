@@ -3,7 +3,7 @@
  * Tests genre, year, and sort filters for Stremio catalogs
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   validateGenre,

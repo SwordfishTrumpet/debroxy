@@ -3,6 +3,13 @@
  * @module constants
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
+
+/** Application version (sourced from package.json) */
+export const VERSION = pkg.version;
+
 /** API request timeout in milliseconds (30 seconds) */
 export const API_TIMEOUT_MS = parseInt(process.env.API_TIMEOUT_MS || '30000', 10);
 
@@ -53,3 +60,153 @@ export const INITIAL_RETRY_DELAY_MS = 1000;
 
 /** Maximum stream counter before reset */
 export const MAX_STREAM_COUNTER = Number.MAX_SAFE_INTEGER - 1;
+
+/** Subtitle file extension regex */
+export const SUBTITLE_EXTENSIONS = /\.(srt|sub|ass|ssa|vtt)$/i;
+
+/** MIME types for subtitle file extensions */
+export const SUBTITLE_MIME_TYPES = {
+  srt: 'application/x-subrip',
+  sub: 'text/plain',
+  ass: 'text/x-ssa',
+  ssa: 'text/x-ssa',
+  vtt: 'text/vtt',
+};
+
+/** ISO 639-1/2 language code to English name mapping */
+export const LANGUAGE_CODES = {
+  // ISO 639-1 (2-letter)
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  pt: 'Portuguese',
+  ru: 'Russian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  nl: 'Dutch',
+  sv: 'Swedish',
+  no: 'Norwegian',
+  da: 'Danish',
+  fi: 'Finnish',
+  pl: 'Polish',
+  cs: 'Czech',
+  hu: 'Hungarian',
+  ro: 'Romanian',
+  tr: 'Turkish',
+  el: 'Greek',
+  he: 'Hebrew',
+  th: 'Thai',
+  vi: 'Vietnamese',
+  id: 'Indonesian',
+  ms: 'Malay',
+  uk: 'Ukrainian',
+  bg: 'Bulgarian',
+  hr: 'Croatian',
+  sr: 'Serbian',
+  sk: 'Slovak',
+  sl: 'Slovenian',
+  et: 'Estonian',
+  lv: 'Latvian',
+  lt: 'Lithuanian',
+  // ISO 639-2 (3-letter)
+  eng: 'English',
+  spa: 'Spanish',
+  fre: 'French',
+  fra: 'French',
+  ger: 'German',
+  deu: 'German',
+  ita: 'Italian',
+  por: 'Portuguese',
+  rus: 'Russian',
+  jpn: 'Japanese',
+  kor: 'Korean',
+  chi: 'Chinese',
+  zho: 'Chinese',
+  ara: 'Arabic',
+  hin: 'Hindi',
+  dut: 'Dutch',
+  nld: 'Dutch',
+  swe: 'Swedish',
+  nor: 'Norwegian',
+  dan: 'Danish',
+  fin: 'Finnish',
+  pol: 'Polish',
+  cze: 'Czech',
+  ces: 'Czech',
+  hun: 'Hungarian',
+  rum: 'Romanian',
+  ron: 'Romanian',
+  tur: 'Turkish',
+  gre: 'Greek',
+  ell: 'Greek',
+  heb: 'Hebrew',
+  tha: 'Thai',
+  vie: 'Vietnamese',
+  ind: 'Indonesian',
+  may: 'Malay',
+  msa: 'Malay',
+  ukr: 'Ukrainian',
+  bul: 'Bulgarian',
+  hrv: 'Croatian',
+  srp: 'Serbian',
+  slk: 'Slovak',
+  slv: 'Slovenian',
+  est: 'Estonian',
+  lav: 'Latvian',
+  lit: 'Lithuanian',
+  // Common full-name variants (lowercase for matching)
+  english: 'English',
+  spanish: 'Spanish',
+  french: 'French',
+  german: 'German',
+  italian: 'Italian',
+  portuguese: 'Portuguese',
+  russian: 'Russian',
+  japanese: 'Japanese',
+  korean: 'Korean',
+  chinese: 'Chinese',
+  arabic: 'Arabic',
+  hindi: 'Hindi',
+  dutch: 'Dutch',
+  swedish: 'Swedish',
+  norwegian: 'Norwegian',
+  danish: 'Danish',
+  finnish: 'Finnish',
+  polish: 'Polish',
+  czech: 'Czech',
+  hungarian: 'Hungarian',
+  romanian: 'Romanian',
+  turkish: 'Turkish',
+  greek: 'Greek',
+  hebrew: 'Hebrew',
+  thai: 'Thai',
+  vietnamese: 'Vietnamese',
+  indonesian: 'Indonesian',
+  malay: 'Malay',
+  ukrainian: 'Ukrainian',
+  bulgarian: 'Bulgarian',
+  croatian: 'Croatian',
+  serbian: 'Serbian',
+  slovak: 'Slovak',
+  slovenian: 'Slovenian',
+  estonian: 'Estonian',
+  latvian: 'Latvian',
+  lithuanian: 'Lithuanian',
+};
+
+/** Watch history completion threshold (0.0 - 1.0) */
+export const WATCH_COMPLETION_THRESHOLD = 0.90;
+
+/** Maximum items in Continue Watching catalog */
+export const MAX_CONTINUE_WATCHING = 50;
+
+/** Auto-cleanup watch history after N days (for completed items) */
+export const WATCH_HISTORY_MAX_AGE_DAYS = 90;
+
+/** Minimum interval between progress updates for same item (milliseconds) */
+export const PROGRESS_REPORT_DEBOUNCE_MS = 5000;

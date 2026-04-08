@@ -214,6 +214,15 @@ export function validatePagination(offset, limit) {
 }
 
 /**
+ * Extract the base IMDB ID from a composite ID (e.g., "tt1234567:1:2" → "tt1234567")
+ * @param {string} id - Composite ID
+ * @returns {string} Base IMDB ID
+ */
+export function extractBaseId(id) {
+  return id.split(':')[0];
+}
+
+/**
  * Parse extra params from Stremio catalog requests
  * @param {string} extra - Extra params string (e.g., "search=query&skip=20")
  * @returns {Object} Parsed params object
@@ -243,4 +252,130 @@ export function parseExtraParams(extra) {
     }
   }
   return extraParams;
+}
+
+/**
+ * Validate progress report payload
+ * @param {Object} body - Request body
+ * @returns {{ valid: boolean, error?: string, data?: Object }} Validation result with normalized data
+ */
+export function validateProgressReport(body) {
+  if (!body || typeof body !== 'object') {
+    return { valid: false, error: 'Request body is required' };
+  }
+
+  // Validate IMDB ID
+  if (!body.imdbId || typeof body.imdbId !== 'string') {
+    return { valid: false, error: 'imdbId is required' };
+  }
+  if (!validateImdbId(body.imdbId)) {
+    return { valid: false, error: 'Invalid IMDB ID format' };
+  }
+
+  // Validate type
+  if (!body.type || !VALID_TYPES.includes(body.type)) {
+    return { valid: false, error: 'type must be "movie" or "series"' };
+  }
+
+  // Validate season/episode for series
+  let season = null;
+  let episode = null;
+  if (body.type === 'series') {
+    if (body.season !== undefined && body.season !== null) {
+      season = parseInt(body.season, 10);
+      if (isNaN(season) || season < 1) {
+        return { valid: false, error: 'season must be a positive integer' };
+      }
+    }
+    if (body.episode !== undefined && body.episode !== null) {
+      episode = parseInt(body.episode, 10);
+      if (isNaN(episode) || episode < 1) {
+        return { valid: false, error: 'episode must be a positive integer' };
+      }
+    }
+  }
+
+  // Validate progressSeconds
+  if (body.progressSeconds === undefined || body.progressSeconds === null) {
+    return { valid: false, error: 'progressSeconds is required' };
+  }
+  const progressSeconds = parseFloat(body.progressSeconds);
+  if (isNaN(progressSeconds) || progressSeconds < 0) {
+    return { valid: false, error: 'progressSeconds must be a non-negative number' };
+  }
+
+  // Validate durationSeconds (optional)
+  let durationSeconds = null;
+  if (body.durationSeconds !== undefined && body.durationSeconds !== null) {
+    durationSeconds = parseFloat(body.durationSeconds);
+    if (isNaN(durationSeconds) || durationSeconds <= 0) {
+      return { valid: false, error: 'durationSeconds must be a positive number' };
+    }
+  }
+
+  // Validate or calculate percentWatched
+  let percentWatched = body.percentWatched;
+  if (percentWatched !== undefined && percentWatched !== null) {
+    percentWatched = parseFloat(percentWatched);
+    if (isNaN(percentWatched) || percentWatched < 0 || percentWatched > 1) {
+      return { valid: false, error: 'percentWatched must be between 0 and 1' };
+    }
+  } else if (durationSeconds && durationSeconds > 0) {
+    // Calculate from progress and duration
+    percentWatched = Math.min(progressSeconds / durationSeconds, 1);
+  } else {
+    percentWatched = 0;
+  }
+
+  return {
+    valid: true,
+    data: {
+      imdb_id: body.imdbId,
+      type: body.type,
+      season,
+      episode,
+      progress_seconds: progressSeconds,
+      duration_seconds: durationSeconds,
+      percent_watched: percentWatched,
+    },
+  };
+}
+
+/**
+ * Validate watch history query parameters
+ * @param {Object} query - Query parameters
+ * @returns {{ valid: boolean, error?: string, data?: Object }} Validation result with normalized data
+ */
+export function validateWatchHistoryQuery(query) {
+  const data = {};
+
+  // Validate type filter (optional)
+  if (query.type !== undefined && query.type !== null) {
+    if (!VALID_TYPES.includes(query.type)) {
+      return { valid: false, error: 'type must be "movie" or "series"' };
+    }
+    data.type = query.type;
+  } else {
+    data.type = null;
+  }
+
+  // Validate completed filter (optional)
+  if (query.completed !== undefined && query.completed !== null) {
+    if (query.completed === 'true' || query.completed === true) {
+      data.completed = true;
+    } else if (query.completed === 'false' || query.completed === false) {
+      data.completed = false;
+    } else {
+      return { valid: false, error: 'completed must be "true" or "false"' };
+    }
+  } else {
+    data.completed = null;
+  }
+
+  // Validate pagination
+  const { offset, limit } = validatePagination(query.skip, query.limit);
+  data.skip = offset;
+  data.limit = limit;
+
+  return { valid: true, data };
 }

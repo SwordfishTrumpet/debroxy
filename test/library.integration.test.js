@@ -333,4 +333,195 @@ describe('library integration', () => {
       }
     });
   });
+
+  describe('subtitle file operations', () => {
+    before(() => {
+      // Insert a title and torrent for subtitle tests
+      db.upsertTitle({
+        imdb_id: 'tt5550001',
+        type: 'movie',
+        name: 'Subtitle Test Movie',
+        year: 2024,
+      });
+      db.upsertTorrent({
+        rd_id: 'SUBTORRENT001',
+        imdb_id: 'tt5550001',
+        hash: 'subhash123',
+        filename: 'Subtitle.Test.Movie.2024.1080p.BluRay.x264-GROUP',
+        quality: '1080p',
+        source: 'BluRay',
+        codec: 'x264',
+        audio: null,
+        hdr: null,
+        season: null,
+        episode: null,
+      });
+    });
+
+    it('should store subtitle files via insertSubtitleFiles', () => {
+      const subs = [
+        {
+          rd_file_id: 10,
+          filename: 'Subtitle.Test.Movie.en.srt',
+          filesize: 50000,
+          link: null,
+          language: 'English',
+          language_code: 'en',
+          format: 'srt',
+          season: null,
+          episode: null,
+        },
+        {
+          rd_file_id: 11,
+          filename: 'Subtitle.Test.Movie.es.srt',
+          filesize: 48000,
+          link: null,
+          language: 'Spanish',
+          language_code: 'es',
+          format: 'srt',
+          season: null,
+          episode: null,
+        },
+      ];
+
+      db.insertSubtitleFiles('SUBTORRENT001', subs);
+
+      const retrieved = db.getSubtitlesForTitle('tt5550001');
+      assert.ok(retrieved.length >= 2, 'Should retrieve stored subtitles');
+
+      const enSub = retrieved.find(s => s.language_code === 'en');
+      assert.ok(enSub, 'Should find English subtitle');
+      assert.strictEqual(enSub.language, 'English');
+      assert.strictEqual(enSub.format, 'srt');
+      assert.strictEqual(enSub.rd_file_id, 10);
+
+      const esSub = retrieved.find(s => s.language_code === 'es');
+      assert.ok(esSub, 'Should find Spanish subtitle');
+      assert.strictEqual(esSub.language, 'Spanish');
+    });
+
+    it('should retrieve subtitles by title for movie (null season/episode)', () => {
+      const subs = db.getSubtitlesForTitle('tt5550001');
+      assert.ok(subs.length >= 2, 'Should retrieve subtitles for movie');
+    });
+
+    it('should return empty for title with no subtitles', () => {
+      const subs = db.getSubtitlesForTitle('tt9999998');
+      assert.strictEqual(subs.length, 0, 'Should return empty array for nonexistent title');
+    });
+
+    it('should retrieve subtitle by ID', () => {
+      const allSubs = db.getSubtitlesForTitle('tt5550001');
+      assert.ok(allSubs.length > 0, 'Should have subtitles to test with');
+
+      const sub = db.getSubtitleById(allSubs[0].id);
+      assert.ok(sub, 'Should retrieve subtitle by ID');
+      assert.strictEqual(sub.id, allSubs[0].id);
+    });
+
+    it('should cascade delete subtitles when torrent is removed', () => {
+      // Insert a separate torrent with subtitles for cascade test
+      db.upsertTitle({
+        imdb_id: 'tt5550002',
+        type: 'movie',
+        name: 'Cascade Test Movie',
+        year: 2024,
+      });
+      db.upsertTorrent({
+        rd_id: 'CASCADETORRENT',
+        imdb_id: 'tt5550002',
+        hash: 'cascadehash',
+        filename: 'Cascade.Test.Movie.2024.1080p',
+        quality: '1080p',
+        source: null,
+        codec: null,
+        audio: null,
+        hdr: null,
+        season: null,
+        episode: null,
+      });
+      db.insertSubtitleFiles('CASCADETORRENT', [{
+        rd_file_id: 20,
+        filename: 'cascade.en.srt',
+        filesize: 30000,
+        link: null,
+        language: 'English',
+        language_code: 'en',
+        format: 'srt',
+        season: null,
+        episode: null,
+      }]);
+
+      // Verify subtitle exists
+      const before = db.getSubtitlesForTitle('tt5550002');
+      assert.ok(before.length > 0, 'Should have subtitles before removal');
+
+      // Remove torrent (cascade should delete subtitle)
+      db.removeTorrent('CASCADETORRENT', 'tt5550002');
+
+      const after = db.getSubtitlesForTitle('tt5550002');
+      assert.strictEqual(after.length, 0, 'Subtitles should be cascade-deleted with torrent');
+    });
+
+    it('should include subtitle count in getStats', () => {
+      const stats = db.getStats();
+      assert.ok(typeof stats.subtitles === 'number', 'Stats should include subtitle count');
+    });
+
+    it('should handle series subtitles with season/episode filtering', () => {
+      // Insert a series torrent with episode-specific subtitles
+      db.upsertTitle({
+        imdb_id: 'tt5550003',
+        type: 'series',
+        name: 'Subtitle Series',
+        year: 2024,
+      });
+      db.upsertTorrent({
+        rd_id: 'SERIESSUBTORRENT',
+        imdb_id: 'tt5550003',
+        hash: 'serieshash',
+        filename: 'Subtitle.Series.S01.1080p',
+        quality: '1080p',
+        source: null,
+        codec: null,
+        audio: null,
+        hdr: null,
+        season: 1,
+        episode: null,
+      });
+      db.insertSubtitleFiles('SERIESSUBTORRENT', [
+        {
+          rd_file_id: 30,
+          filename: 'S01E01.en.srt',
+          filesize: 20000,
+          link: null,
+          language: 'English',
+          language_code: 'en',
+          format: 'srt',
+          season: 1,
+          episode: 1,
+        },
+        {
+          rd_file_id: 31,
+          filename: 'S01E02.en.srt',
+          filesize: 21000,
+          link: null,
+          language: 'English',
+          language_code: 'en',
+          format: 'srt',
+          season: 1,
+          episode: 2,
+        },
+      ]);
+
+      // Should return only episode 1 subtitle
+      const ep1Subs = db.getSubtitlesForTitle('tt5550003', 1, 1);
+      assert.ok(ep1Subs.length >= 1, 'Should find subtitles for S01E01');
+      assert.ok(ep1Subs.every(s => s.episode === 1), 'All returned should be episode 1');
+
+      // Should return only episode 2 subtitle
+      const ep2Subs = db.getSubtitlesForTitle('tt5550003', 1, 2);
+      assert.ok(ep2Subs.length >= 1, 'Should find subtitles for S01E02');
+    });
+  });
 });

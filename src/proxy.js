@@ -36,6 +36,12 @@ const VIDEO_MIME_TYPES = {
   ts: 'video/mp2t',
   mpeg: 'video/mpeg',
   mpg: 'video/mpeg',
+  // Subtitle MIME types
+  srt: 'application/x-subrip',
+  sub: 'text/plain',
+  ass: 'text/x-ssa',
+  ssa: 'text/x-ssa',
+  vtt: 'text/vtt',
 };
 
 // Content-Types that break streaming and should be replaced
@@ -51,7 +57,7 @@ const BAD_CONTENT_TYPES = [
  * @param {string} [fallback='video/mp4'] - Fallback MIME type
  * @returns {string} MIME type
  */
-function getMimeType(filename, fallback = 'video/mp4') {
+export function getMimeType(filename, fallback = 'video/mp4') {
   const ext = filename?.split('.').pop()?.toLowerCase();
   return VIDEO_MIME_TYPES[ext] || fallback;
 }
@@ -376,4 +382,5 @@ export default {
   handlePreflight,
   getActiveStreams,
   getStreamCount,
+  getMimeType,
 };

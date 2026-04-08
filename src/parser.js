@@ -5,6 +5,7 @@
  */
 
 import { LRUCache } from 'lru-cache';
+import { SUBTITLE_EXTENSIONS, LANGUAGE_CODES } from './constants.js';
 
 // Parser result cache (max 5000 entries, TTL 1 hour)
 const parseCache = new LRUCache({
@@ -399,9 +400,122 @@ export function buildSearchQuery(parsed) {
   return query;
 }
 
+/**
+ * Check if a filename is a subtitle file
+ * @param {string} filename - Filename or path to check
+ * @returns {boolean} True if subtitle file
+ */
+export function isSubtitleFile(filename) {
+  if (!filename || typeof filename !== 'string') return false;
+  return SUBTITLE_EXTENSIONS.test(filename);
+}
+
+/**
+ * Parse subtitle metadata from a filename
+ * Extracts language, language code, and format from subtitle file paths.
+ * Handles patterns like: Movie.en.srt, Movie.English.srt, Movie.eng.srt,
+ * Subs/English.srt, Subs/English/movie.srt
+ * @param {string} filename - Subtitle filename or full path
+ * @returns {{ language: string|null, languageCode: string|null, format: string }}
+ */
+export function parseSubtitleInfo(filename) {
+  if (!filename || typeof filename !== 'string') {
+    return { language: null, languageCode: null, format: '' };
+  }
+
+  // Extract format (extension without dot)
+  const extMatch = filename.match(/\.([a-zA-Z]+)$/);
+  const format = extMatch ? extMatch[1].toLowerCase() : '';
+
+  // Try to detect language from various patterns
+  let language = null;
+  let languageCode = null;
+
+  // Get the basename (last path component) without extension
+  const parts = filename.replace(/\\/g, '/').split('/');
+  const basename = parts[parts.length - 1];
+  const basenameNoExt = basename.replace(/\.[^.]+$/, '');
+
+  // Pattern 1: Language code/name as last segment before extension
+  // e.g., "Movie.Name.en.srt", "Movie.Name.English.srt", "Movie.Name.eng.srt"
+  const lastDotSegment = basenameNoExt.split('.').pop();
+  if (lastDotSegment) {
+    const match = LANGUAGE_CODES[lastDotSegment.toLowerCase()];
+    if (match) {
+      language = match;
+      languageCode = findShortCode(lastDotSegment.toLowerCase());
+    }
+  }
+
+  // Pattern 2: Language in directory path
+  // e.g., "Subs/English.srt", "Subs/English/movie.srt", "Subs/eng/movie.srt"
+  if (!language && parts.length > 1) {
+    for (let i = parts.length - 2; i >= 0; i--) {
+      const dirName = parts[i].toLowerCase();
+      const match = LANGUAGE_CODES[dirName];
+      if (match) {
+        language = match;
+        languageCode = findShortCode(dirName);
+        break;
+      }
+    }
+    // Also check if the basename (without ext) IS the language name
+    // e.g., "Subs/English.srt" → basename = "English"
+    if (!language) {
+      const match = LANGUAGE_CODES[basenameNoExt.toLowerCase()];
+      if (match) {
+        language = match;
+        languageCode = findShortCode(basenameNoExt.toLowerCase());
+      }
+    }
+  }
+
+  // Pattern 3: Language code with underscore/hyphen separator
+  // e.g., "Movie_en.srt", "Movie-eng.srt"
+  if (!language) {
+    const sepMatch = basenameNoExt.match(/[_\-]([a-zA-Z]{2,3})$/);
+    if (sepMatch) {
+      const code = sepMatch[1].toLowerCase();
+      const match = LANGUAGE_CODES[code];
+      if (match) {
+        language = match;
+        languageCode = findShortCode(code);
+      }
+    }
+  }
+
+  return { language, languageCode, format };
+}
+
+/**
+ * Find the shortest (ISO 639-1 preferred) language code for a given code or name
+ * @param {string} input - Language code or lowercase language name
+ * @returns {string|null} ISO 639-1 code if possible, or the input code
+ */
+function findShortCode(input) {
+  // If it's already a 2-letter code that maps, return it
+  if (input.length === 2 && LANGUAGE_CODES[input]) return input;
+
+  // If it's a 3-letter code or full name, find the matching 2-letter code
+  const targetLanguage = LANGUAGE_CODES[input];
+  if (!targetLanguage) return input;
+
+  // Search for a 2-letter code that maps to the same language
+  for (const [code, lang] of Object.entries(LANGUAGE_CODES)) {
+    if (code.length === 2 && lang === targetLanguage) {
+      return code;
+    }
+  }
+
+  // Fallback to input
+  return input;
+}
+
 export default {
   parse,
   parseEpisodeFromFilename,
   formatQualityTag,
   buildSearchQuery,
+  isSubtitleFile,
+  parseSubtitleInfo,
 };

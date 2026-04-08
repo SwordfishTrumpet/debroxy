@@ -157,6 +157,44 @@ describe('server', () => {
       
       assert.ok(Array.isArray(res.body.streams));
     });
+
+    it('GET /:token/subtitles/:type/:id.json returns subtitles', async () => {
+      const res = await request(app)
+        .get(`/${TEST_TOKEN}/subtitles/movie/tt1234567.json`)
+        .expect(200);
+      
+      assert.ok(Array.isArray(res.body.subtitles));
+    });
+
+    it('GET /:token/subtitles/:type/:id.json returns subtitles for series', async () => {
+      const res = await request(app)
+        .get(`/${TEST_TOKEN}/subtitles/series/tt1234567:1:1.json`)
+        .expect(200);
+      
+      assert.ok(Array.isArray(res.body.subtitles));
+    });
+
+    it('GET /:token/subtitles/:type/:id.json validates type', async () => {
+      const res = await request(app)
+        .get(`/${TEST_TOKEN}/subtitles/invalid/tt1234567.json`)
+        .expect(400);
+      
+      assert.ok(res.body.error.includes('Invalid type'));
+    });
+
+    it('GET /:token/subtitles/:type/:id.json validates IMDB ID', async () => {
+      const res = await request(app)
+        .get(`/${TEST_TOKEN}/subtitles/movie/not-an-imdb-id.json`)
+        .expect(400);
+      
+      assert.ok(res.body.error.includes('Invalid IMDB'));
+    });
+
+    it('subtitle endpoint requires auth when enabled', async () => {
+      await request(app)
+        .get('/invalid-token/subtitles/movie/tt1234567.json')
+        .expect(401);
+    });
   });
 
   describe('Management API Routes', () => {

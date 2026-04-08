@@ -55,7 +55,7 @@ async function withRetry(requestFn, retries = MAX_RETRIES) {
     if (shouldRetry) {
       // Exponential backoff: 1s, 2s, 4s (for 3 retries)
       const attempt = MAX_RETRIES - retries;
-      const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+      const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
       log.warn({ status, retries, delay }, 'RD API request failed, retrying...');
       await new Promise(resolve => setTimeout(resolve, delay));
       return withRetry(requestFn, retries - 1);

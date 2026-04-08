@@ -5,6 +5,7 @@
  */
 
 import config from './config.js';
+import { VERSION } from './constants.js';
 
 /**
  * Generate the configure page HTML
@@ -32,7 +33,7 @@ export function generateConfigurePage(data) {
       : 'pending';
 
   const lastSyncFormatted = library.lastSync 
-    ? new Date(library.lastSync).toLocaleString() 
+    ? new Date(Number(library.lastSync)).toLocaleString() 
     : 'Never';
 
   // Quality options for the dropdown
@@ -516,7 +517,7 @@ export function generateConfigurePage(data) {
     </div>
     
     <footer>
-      <p>Debroxy v1.1.0 &middot; <a href="https://github.com/yourusername/debroxy" target="_blank">GitHub</a></p>
+      <p>Debroxy v${VERSION} &middot; <a href="https://github.com/SwordfishTrumpet/debroxy" target="_blank">GitHub</a></p>
       <p style="margin-top: 8px;">Authentication: ${token ? 'Enabled' : 'Disabled'}</p>
     </footer>
   </div>
@@ -524,8 +525,8 @@ export function generateConfigurePage(data) {
   <div class="toast" id="toast"></div>
   
   <script>
-    const API_BASE = '${apiBase}';
-    const AUTH_HEADER = ${token ? `{ 'Authorization': 'Bearer ${token}' }` : '{}'};
+    const API_BASE = ${JSON.stringify(apiBase)};
+    const AUTH_HEADER = ${token ? `{ 'Authorization': 'Bearer ' + ${JSON.stringify(token)} }` : '{}'};
     
     function showToast(message, type = 'info') {
       const toast = document.getElementById('toast');
@@ -617,7 +618,7 @@ export function generateConfigurePage(data) {
         document.getElementById('stat-unmatched').textContent = data.stats.unmatched || 0;
       }
       if (data.lastSync) {
-        document.getElementById('last-sync').textContent = new Date(data.lastSync).toLocaleString();
+        document.getElementById('last-sync').textContent = new Date(Number(data.lastSync)).toLocaleString();
       }
     }
     

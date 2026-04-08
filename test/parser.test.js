@@ -5,7 +5,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parse, parseEpisodeFromFilename, formatQualityTag } from '../src/parser.js';
+import { parse, parseEpisodeFromFilename, formatQualityTag, isSubtitleFile, parseSubtitleInfo } from '../src/parser.js';
 
 describe('parser.parse', () => {
   describe('Movies', () => {
@@ -345,5 +345,134 @@ describe('formatQualityTag', () => {
   it('excludes SDR from tag', () => {
     const tag = formatQualityTag({ quality: '1080p', hdr: 'SDR' });
     assert.strictEqual(tag, '1080p');
+  });
+});
+
+describe('isSubtitleFile', () => {
+  it('returns true for .srt files', () => {
+    assert.strictEqual(isSubtitleFile('movie.en.srt'), true);
+  });
+
+  it('returns true for .sub files', () => {
+    assert.strictEqual(isSubtitleFile('movie.sub'), true);
+  });
+
+  it('returns true for .ass files', () => {
+    assert.strictEqual(isSubtitleFile('movie.ass'), true);
+  });
+
+  it('returns true for .ssa files', () => {
+    assert.strictEqual(isSubtitleFile('movie.ssa'), true);
+  });
+
+  it('returns true for .vtt files', () => {
+    assert.strictEqual(isSubtitleFile('movie.vtt'), true);
+  });
+
+  it('returns false for .mkv files', () => {
+    assert.strictEqual(isSubtitleFile('movie.mkv'), false);
+  });
+
+  it('returns false for .mp4 files', () => {
+    assert.strictEqual(isSubtitleFile('movie.mp4'), false);
+  });
+
+  it('returns false for .txt files', () => {
+    assert.strictEqual(isSubtitleFile('readme.txt'), false);
+  });
+
+  it('is case-insensitive', () => {
+    assert.strictEqual(isSubtitleFile('movie.SRT'), true);
+    assert.strictEqual(isSubtitleFile('movie.Vtt'), true);
+  });
+
+  it('handles paths with directories', () => {
+    assert.strictEqual(isSubtitleFile('Subs/English/movie.srt'), true);
+    assert.strictEqual(isSubtitleFile('/path/to/Subs/movie.ass'), true);
+  });
+
+  it('returns false for null/empty input', () => {
+    assert.strictEqual(isSubtitleFile(null), false);
+    assert.strictEqual(isSubtitleFile(''), false);
+    assert.strictEqual(isSubtitleFile(undefined), false);
+  });
+});
+
+describe('parseSubtitleInfo', () => {
+  it('extracts language from dot-separated code (Movie.en.srt)', () => {
+    const result = parseSubtitleInfo('Movie.Name.en.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('extracts language from full name (Movie.English.srt)', () => {
+    const result = parseSubtitleInfo('Movie.Name.English.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('extracts language from 3-letter code (Movie.eng.srt)', () => {
+    const result = parseSubtitleInfo('Movie.Name.eng.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('extracts Spanish from directory path (Subs/Spanish.srt)', () => {
+    const result = parseSubtitleInfo('Subs/Spanish.srt');
+    assert.strictEqual(result.language, 'Spanish');
+    assert.strictEqual(result.languageCode, 'es');
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('extracts language from parent directory (Subs/English/movie.srt)', () => {
+    const result = parseSubtitleInfo('Subs/English/movie.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+  });
+
+  it('extracts language from underscore separator (Movie_en.srt)', () => {
+    const result = parseSubtitleInfo('Movie_en.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+  });
+
+  it('extracts language from hyphen separator (Movie-eng.srt)', () => {
+    const result = parseSubtitleInfo('Movie-eng.srt');
+    assert.strictEqual(result.language, 'English');
+    assert.strictEqual(result.languageCode, 'en');
+  });
+
+  it('returns null language when no language detected (Movie.srt)', () => {
+    const result = parseSubtitleInfo('Movie.srt');
+    assert.strictEqual(result.language, null);
+    assert.strictEqual(result.languageCode, null);
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('extracts format correctly for .vtt', () => {
+    const result = parseSubtitleInfo('subs.vtt');
+    assert.strictEqual(result.format, 'vtt');
+  });
+
+  it('extracts format correctly for .ass', () => {
+    const result = parseSubtitleInfo('movie.ass');
+    assert.strictEqual(result.format, 'ass');
+  });
+
+  it('handles series subtitle with episode (S01E05.por.srt)', () => {
+    const result = parseSubtitleInfo('Movie.Name.S01E05.por.srt');
+    assert.strictEqual(result.language, 'Portuguese');
+    assert.strictEqual(result.languageCode, 'pt');
+    assert.strictEqual(result.format, 'srt');
+  });
+
+  it('handles null/empty input gracefully', () => {
+    const result = parseSubtitleInfo(null);
+    assert.strictEqual(result.language, null);
+    assert.strictEqual(result.languageCode, null);
+    assert.strictEqual(result.format, '');
   });
 });

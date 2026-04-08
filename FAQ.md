@@ -94,6 +94,7 @@ Comprehensive technical documentation for Debroxy.
 | `CINEMETA_MAX_RETRIES` | `3` | Max retries for Cinemeta rate limiting |
 | `MAX_SYNC_ITERATIONS` | `10000` | Safety limit for sync loops |
 | `DB_MAX_RETRIES` | `5` | Database connection retry attempts |
+| `WATCH_COMPLETION_THRESHOLD` | `0.90` | Percentage (0.5-0.99) at which items are marked as "completed" in watch history |
 
 ### PROXY_TOKEN: When to Use It
 
@@ -409,6 +410,64 @@ curl -H "Authorization: Bearer $TOKEN" https://debroxy.example.com/$TOKEN/api/st
 }
 ```
 
+#### Management API — Watch History
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/:token/api/progress` | POST | Report watch progress (`{ "imdbId": "tt1234567", "type": "movie", "progressSeconds": 1800, "durationSeconds": 3600 }`) |
+| `/:token/api/progress/:imdbId` | GET | Get progress for item (`?season=1&episode=2` for series) |
+| `/:token/api/progress/:imdbId` | DELETE | Delete progress for item |
+| `/:token/api/progress/:imdbId/complete` | POST | Mark item as manually completed |
+| `/:token/api/history` | GET | Get watch history (`?type=movie&completed=false&skip=0&limit=50`) |
+| `/:token/api/history/stats` | GET | Get watch statistics |
+
+**Example: Report progress**
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"imdbId":"tt1234567","type":"movie","progressSeconds":1800,"durationSeconds":3600}' \
+  https://debroxy.example.com/$TOKEN/api/progress
+```
+
+**Example: Get watch history**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://debroxy.example.com/$TOKEN/api/history?limit=10"
+```
+```json
+{
+  "items": [
+    {
+      "imdb_id": "tt1234567",
+      "type": "movie",
+      "name": "Example Movie",
+      "progress_seconds": 1800,
+      "percent_watched": 0.5,
+      "is_completed": 0,
+      "last_watched_at": 1712581200000
+    }
+  ],
+  "total": 42,
+  "skip": 0,
+  "limit": 10
+}
+```
+
+**Example: Get watch stats**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  https://debroxy.example.com/$TOKEN/api/history/stats
+```
+```json
+{
+  "totalWatched": 42,
+  "totalMovies": 30,
+  "totalSeries": 12,
+  "totalTimeMinutes": 2847,
+  "avgCompletion": 0.73
+}
+```
+
 ---
 
 ## Troubleshooting
@@ -630,18 +689,31 @@ npm test -- --watch        # Watch mode
 
 ```
 src/
-├── server.js       # Express app, routes, startup
-├── config.js       # Environment config with validation
-├── constants.js    # Timeout and configuration constants
-├── db.js           # SQLite schema, migrations, queries
-├── realdebrid.js   # RD API client
-├── library.js      # Library sync engine
-├── logger.js       # Pino logger setup
-├── middleware.js   # Reusable Express middleware
-├── parser.js       # Torrent filename parser
-├── proxy.js        # Stream proxy middleware
-├── stremio.js      # Stremio addon handlers
-└── validators.js   # Input validation functions
+├── server.js          # Express app entry point, middleware, lifecycle
+├── config.js          # Environment config with validation
+├── constants.js       # Timeout, version, and configuration constants
+├── db.js              # SQLite schema, migrations, queries
+├── realdebrid.js      # RD API client with retry & circuit breaker
+├── library.js         # Library sync engine (RD → SQLite → Cinemeta)
+├── stremio.js         # Stremio addon business logic
+├── proxy.js           # Stream proxy with SSRF protection
+├── parser.js          # Torrent filename parser
+├── security.js        # Token auth, lockout, constant-time comparison
+├── middleware.js       # asyncHandler, validation middleware
+├── validators.js      # Input validation functions
+├── errors.js          # Structured error codes & responses
+├── metrics.js         # Prometheus metrics collection
+├── logger.js          # Pino logger setup
+├── configure.js       # HTML configuration page generator
+├── circuit-breaker.js # Circuit breaker pattern for RD API
+├── handlers/          # HTTP request handlers
+│   ├── stremio.js     # Stremio addon handlers
+│   ├── api.js         # Management API handlers
+│   └── system.js      # Health & metrics handlers
+└── routes/            # Route registration
+    ├── stremio.js     # Stremio addon routes
+    ├── api.js         # Management API routes
+    └── system.js      # System routes
 ```
 
 ### Database Schema

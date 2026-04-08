@@ -28,6 +28,7 @@ Debroxy turns your Real-Debrid torrent collection into a beautiful, browsable st
 - **Single IP to Real-Debrid** — All streams proxied through your server. No more account flags.
 - **Stream from anywhere** — Phone, work laptop, hotel TV — RD only sees your home IP.
 - **Your RD library in Stremio** — Auto-syncs every 15 minutes. Season packs handled.
+- **Continue Watching** — Resume where you left off, across all your devices.
 - **Share without sharing credentials** — Family can stream through your server.
 - **Handles 50,000+ torrents** — Optimized for large collections.
 
