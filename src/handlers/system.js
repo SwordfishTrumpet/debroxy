@@ -7,6 +7,7 @@ import config from '../config.js';
 import * as db from '../db.js';
 import * as proxy from '../proxy.js';
 import * as library from '../library.js';
+import * as settings from '../settings.js';
 import * as metrics from '../metrics.js';
 import { ErrorCode, createErrorResponse } from '../errors.js';
 import { safeCompare } from '../security.js';
@@ -37,13 +38,14 @@ export function healthHandler(req, res) {
     // Return full stats for authenticated requests
     const stats = dbConnected ? db.getStats() : null;
     const streams = proxy.getActiveStreams();
+    const libraryStatus = library.getStatus();
 
     // Update metrics with current library stats
     if (METRICS_ENABLED && stats) {
       metrics.updateLibraryMetrics({
         ...stats,
-        isComplete: library.getStatus().isComplete,
-        lastSync: library.getStatus().lastSync,
+        isComplete: libraryStatus.isComplete,
+        lastSync: libraryStatus.lastSync,
       });
       metrics.activeStreams.set(streams.length);
     }
@@ -56,7 +58,7 @@ export function healthHandler(req, res) {
       library: stats,
       streams: {
         active: streams.length,
-        max: config.maxConcurrentStreams,
+        max: settings.get('maxConcurrentStreams'),
       },
     });
   } else {
@@ -77,10 +79,11 @@ export async function metricsHandler(req, res) {
   // Update library metrics before returning
   const stats = db.getStats();
   const streams = proxy.getActiveStreams();
+  const libraryStatus = library.getStatus();
   metrics.updateLibraryMetrics({
     ...stats,
-    isComplete: library.getStatus().isComplete,
-    lastSync: library.getStatus().lastSync,
+    isComplete: libraryStatus.isComplete,
+    lastSync: libraryStatus.lastSync,
   });
   metrics.activeStreams.set(streams.length);
 

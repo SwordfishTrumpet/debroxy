@@ -7,6 +7,7 @@ import { pipeline } from 'stream/promises';
 import { lookup } from 'dns/promises';
 import axios from 'axios';
 import config from './config.js';
+import * as settings from './settings.js';
 import { createLogger } from './logger.js';
 import { PROXY_REQUEST_TIMEOUT_MS, PROXY_MAX_REDIRECTS, MAX_STREAM_COUNTER } from './constants.js';
 
@@ -267,14 +268,15 @@ export function createProxyHandler(options) {
       return res.status(403).json({ error: validation.error, error_code: 'FORBIDDEN' });
     }
 
-    // Check concurrency limit
-    if (activeStreams.size >= config.maxConcurrentStreams) {
-      log.warn({ active: activeStreams.size, max: config.maxConcurrentStreams }, 'Max concurrent streams reached');
+    // Check concurrency limit using runtime settings
+    const maxConcurrentStreams = settings.get('maxConcurrentStreams');
+    if (activeStreams.size >= maxConcurrentStreams) {
+      log.warn({ active: activeStreams.size, max: maxConcurrentStreams }, 'Max concurrent streams reached');
       res.set('Retry-After', '30');
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: 'Maximum concurrent streams reached',
         active: activeStreams.size,
-        max: config.maxConcurrentStreams,
+        max: maxConcurrentStreams,
       });
     }
 

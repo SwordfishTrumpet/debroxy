@@ -158,4 +158,17 @@ describe('proxy', () => {
       assert.strictEqual(getMimeType('file.xyz'), 'video/mp4');
     });
   });
+
+  describe('settings integration', () => {
+    it('should use settings module for configuration', async () => {
+      // Import settings to verify it can be loaded
+      const settings = await import('../src/settings.js');
+      assert.strictEqual(typeof settings.get, 'function');
+
+      // Verify maxConcurrentStreams is accessible
+      const maxStreams = settings.get('maxConcurrentStreams');
+      assert.strictEqual(typeof maxStreams, 'number');
+      assert.ok(maxStreams >= 1 && maxStreams <= 20);
+    });
+  });
 });

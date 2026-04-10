@@ -101,7 +101,7 @@ export async function listDownloadsHandler(req, res) {
 export function getStreamsHandler(req, res) {
   res.json({
     active: proxy.getActiveStreams(),
-    max: config.maxConcurrentStreams,
+    max: settings.get('maxConcurrentStreams'),
   });
 }
 
@@ -357,7 +357,7 @@ export function getSettingsHandler(req, res) {
 
 /**
  * Update settings handler
- * Updates settings and clears cache when transcoding changes
+ * Updates settings and clears cache when transcoding changes, restarts timer when sync interval changes
  */
 export function updateSettingsHandler(req, res) {
   const result = settings.updateMany(req.body);
@@ -366,6 +366,12 @@ export function updateSettingsHandler(req, res) {
   // so the new setting takes effect immediately
   if (result.updated && 'transcodingEnabled' in result.updated) {
     stremio.clearUrlCache?.();
+  }
+
+  // If syncIntervalMin was changed, restart the sync timer
+  // so the new interval takes effect immediately
+  if (result.updated && 'syncIntervalMin' in result.updated) {
+    library.restartSyncTimer();
   }
 
   res.json({

@@ -708,6 +708,16 @@ async function incrementalSync() {
 }
 
 /**
+ * Restart the sync timer (called when syncIntervalMin changes)
+ */
+export function restartSyncTimer() {
+  if (syncTimer) {
+    log.info('Restarting sync timer with new interval');
+    startSyncTimer();
+  }
+}
+
+/**
  * Start the sync timer
  */
 export function startSyncTimer() {
@@ -812,6 +822,7 @@ export default {
   initialize,
   startSyncTimer,
   stopSyncTimer,
+  restartSyncTimer,
   resync,
   forceSync,
   getStatus,

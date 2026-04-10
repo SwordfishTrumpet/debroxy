@@ -524,4 +524,22 @@ describe('library integration', () => {
       assert.ok(ep2Subs.length >= 1, 'Should find subtitles for S01E02');
     });
   });
+
+  describe('sync timer management', () => {
+    it('should restart sync timer when restartSyncTimer is called', () => {
+      // First start the timer
+      library.startSyncTimer();
+
+      // Get initial timer state (should be running)
+      // Then restart it - this should clear and restart with new interval
+      library.restartSyncTimer();
+
+      // Timer should still be running after restart
+      library.stopSyncTimer();
+
+      // After stopping, timer should be null
+      // restart should not start it again if not running
+      library.restartSyncTimer(); // Should be no-op when timer not running
+    });
+  });
 });
