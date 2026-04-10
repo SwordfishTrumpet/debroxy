@@ -71,21 +71,25 @@ export async function streamHandler(req, res) {
  * @param {Object} req - Express request
  * @param {Object} res - Express response
  */
-export async function streamPlayHandler(req, res) {
-  const streamInfo = stremio.decodeStreamInfo(req.params.encoded);
+export async function streamPlayHandler(req, res, next) {
+  try {
+    const streamInfo = stremio.decodeStreamInfo(req.params.encoded);
 
-  if (!streamInfo) {
-    return res.status(400).json(createErrorResponse(400, 'Invalid stream info', ErrorCode.BAD_REQUEST));
+    if (!streamInfo) {
+      return res.status(400).json(createErrorResponse(400, 'Invalid stream info', ErrorCode.BAD_REQUEST));
+    }
+
+    const validation = validateStreamInfo(streamInfo);
+    if (!validation.valid) {
+      return res.status(400).json(createErrorResponse(400, validation.error, ErrorCode.VALIDATION_ERROR));
+    }
+
+    const urlInfo = await stremio.getStreamUrl(streamInfo, req.ip);
+    const handler = proxy.createProxyHandler(urlInfo);
+    await handler(req, res);
+  } catch (error) {
+    next(error);
   }
-
-  const validation = validateStreamInfo(streamInfo);
-  if (!validation.valid) {
-    return res.status(400).json(createErrorResponse(400, validation.error, ErrorCode.VALIDATION_ERROR));
-  }
-
-  const urlInfo = await stremio.getStreamUrl(streamInfo, req.ip);
-  const handler = proxy.createProxyHandler(urlInfo);
-  await handler(req, res);
 }
 
 /**
@@ -107,21 +111,25 @@ export function subtitlesHandler(req, res) {
  * @param {Object} req - Express request
  * @param {Object} res - Express response
  */
-export async function subtitleServeHandler(req, res) {
-  const subtitleInfo = stremio.decodeStreamInfo(req.params.encoded);
+export async function subtitleServeHandler(req, res, next) {
+  try {
+    const subtitleInfo = stremio.decodeStreamInfo(req.params.encoded);
 
-  if (!subtitleInfo) {
-    return res.status(400).json(createErrorResponse(400, 'Invalid subtitle info', ErrorCode.BAD_REQUEST));
+    if (!subtitleInfo) {
+      return res.status(400).json(createErrorResponse(400, 'Invalid subtitle info', ErrorCode.BAD_REQUEST));
+    }
+
+    const urlInfo = await stremio.getSubtitleUrl(subtitleInfo);
+
+    if (!urlInfo) {
+      return res.status(404).json(createErrorResponse(404, 'Subtitle file not available', ErrorCode.NOT_FOUND));
+    }
+
+    const handler = proxy.createProxyHandler(urlInfo);
+    await handler(req, res);
+  } catch (error) {
+    next(error);
   }
-
-  const urlInfo = await stremio.getSubtitleUrl(subtitleInfo);
-
-  if (!urlInfo) {
-    return res.status(404).json(createErrorResponse(404, 'Subtitle file not available', ErrorCode.NOT_FOUND));
-  }
-
-  const handler = proxy.createProxyHandler(urlInfo);
-  await handler(req, res);
 }
 
 /**

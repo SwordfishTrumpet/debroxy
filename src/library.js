@@ -43,12 +43,6 @@ const cinemetaCache = new LRUCache({
   ttl: CINEMETA_CACHE_TTL_MS, // 24 hours
 });
 
-/** Maximum queue size for Cinemeta requests to prevent OOM */
-
-/** Maximum sync loop iterations to prevent infinite loops */
-
-/** Batch size for incremental sync processing */
-
 /**
  * Wrapper function to enforce queue size limit with backpressure
  * @param {Function} fn - Function to enqueue
@@ -62,10 +56,6 @@ async function enqueueCinemetaRequest(fn, priority = 0) {
   }
   return cinemetaQueue.add(fn, { priority });
 }
-
-/** Maximum retries for Cinemeta rate limiting */
-
-/** Minimum Cinemeta match score to accept (0.0 - 1.0) */
 
 /**
  * Search Cinemeta for a title (with caching)

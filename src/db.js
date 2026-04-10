@@ -728,7 +728,8 @@ export function getStreamsForTitle(imdbId, season = null, episode = null) {
  * @returns {boolean} True if indexed
  */
 export function isIndexed(rdId) {
-  // Single consolidated query checks both torrents and unmatched tables
+  // Query has two placeholders (one for torrents table, one for unmatched)
+  // Both check the same rdId, so we pass it twice
   return !!statements.isIndexed.get(rdId, rdId);
 }
 

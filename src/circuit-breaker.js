@@ -41,6 +41,8 @@ export function createCircuitBreaker(options = {}) {
   let failures = [];
   let lastFailureTime = 0;
   let halfOpenLock = false; // Atomic lock for half-open state
+  let halfOpenLockTime = 0; // Track when lock was acquired for safety
+  const HALF_OPEN_LOCK_TIMEOUT = 60000; // 60 seconds max lock time
 
   /**
    * Clean up old failures outside the time window
@@ -128,6 +130,12 @@ export function createCircuitBreaker(options = {}) {
 
       // If half-open, only allow one request at a time (atomic check-and-increment)
       if (state === State.HALF_OPEN) {
+        // Safety: auto-release stale lock (shouldn't happen, but protects against bugs)
+        if (halfOpenLock && Date.now() - halfOpenLockTime > HALF_OPEN_LOCK_TIMEOUT) {
+          log.warn({ name, lockDuration: Date.now() - halfOpenLockTime }, 'Releasing stale half-open lock');
+          halfOpenLock = false;
+        }
+
         // Atomic check: if already locked, reject immediately
         if (halfOpenLock) {
           const error = new Error(`Circuit breaker is HALF_OPEN for ${name}, waiting for test request`);
@@ -136,6 +144,7 @@ export function createCircuitBreaker(options = {}) {
           throw error;
         }
         halfOpenLock = true; // Claim the test slot atomically
+        halfOpenLockTime = Date.now();
         log.debug({ name }, 'Allowing test request in half-open state');
       }
 
@@ -152,6 +161,7 @@ export function createCircuitBreaker(options = {}) {
         // Release the lock if we claimed the test slot
         if (halfOpenLock) {
           halfOpenLock = false;
+          halfOpenLockTime = 0;
         }
       }
     };
@@ -165,6 +175,7 @@ export function createCircuitBreaker(options = {}) {
     failures = [];
     lastFailureTime = 0;
     halfOpenLock = false;
+    halfOpenLockTime = 0;
     log.info({ name }, 'Circuit breaker reset');
   }
 
