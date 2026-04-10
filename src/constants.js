@@ -52,6 +52,27 @@ export const SYNC_BATCH_SIZE = 10;
 /** Maximum retries for API requests */
 export const MAX_RETRIES = 3;
 
+/** Cinemeta API queue size (limits concurrent pending requests) */
+export const CINEMETA_QUEUE_SIZE = parseInt(process.env.CINEMETA_QUEUE_SIZE || '1000', 10);
+
+/** Maximum sync iterations to prevent infinite loops */
+export const MAX_SYNC_ITERATIONS = parseInt(process.env.MAX_SYNC_ITERATIONS || '10000', 10);
+
+/** Incremental sync batch size (torrents per batch) */
+export const INCREMENTAL_BATCH_SIZE = parseInt(process.env.INCREMENTAL_BATCH_SIZE || '50', 10);
+
+/** Maximum retries for Cinemeta API requests */
+export const CINEMETA_MAX_RETRIES = parseInt(process.env.CINEMETA_MAX_RETRIES || '3', 10);
+
+/** Minimum Cinemeta match score (0-1) */
+export const MIN_CINEMETA_SCORE = 0.4;
+
+/** Cinemeta cache maximum entries */
+export const CINEMETA_CACHE_MAX = 1000;
+
+/** Cinemeta cache TTL in milliseconds (24 hours) */
+export const CINEMETA_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 /** Initial retry delay in milliseconds */
 export const INITIAL_RETRY_DELAY_MS = 1000;
 

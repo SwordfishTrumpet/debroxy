@@ -6,7 +6,6 @@
 import { pipeline } from 'stream/promises';
 import { lookup } from 'dns/promises';
 import axios from 'axios';
-import config from './config.js';
 import * as settings from './settings.js';
 import { createLogger } from './logger.js';
 import { PROXY_REQUEST_TIMEOUT_MS, PROXY_MAX_REDIRECTS, MAX_STREAM_COUNTER } from './constants.js';

@@ -130,7 +130,8 @@ export function validateMagnet(magnet) {
     if (!magnet.startsWith('magnet:?')) return false;
 
     // Extract and validate info hash (40 hex chars or 32 base32 chars)
-    const xtMatch = magnet.match(/xt=urn:btih:([a-f0-9]{40}|[a-z2-7]{32})/i);
+    // Hash must be followed by & (next parameter) or end of string
+    const xtMatch = magnet.match(/xt=urn:btih:([a-f0-9]{40}|[a-z2-7]{32})(?=&|$)/i);
     if (!xtMatch) return false;
 
     // Validate info hash characters
@@ -207,9 +208,11 @@ export function validateStreamInfo(streamInfo) {
  * @returns {{ offset: number, limit: number }} Normalized values
  */
 export function validatePagination(offset, limit) {
+  const parsedOffset = parseInt(offset);
+  const parsedLimit = parseInt(limit);
   return {
-    offset: Math.max(0, parseInt(offset) || 0),
-    limit: Math.min(Math.max(1, parseInt(limit) || 100), 500),
+    offset: Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset),
+    limit: Math.min(Math.max(1, isNaN(parsedLimit) ? 100 : parsedLimit), 500),
   };
 }
 

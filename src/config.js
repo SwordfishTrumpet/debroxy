@@ -56,13 +56,13 @@ function loadConfig() {
     process.exit(1);
   }
 
-  if (isNaN(config.maxConcurrentStreams) || config.maxConcurrentStreams < 1) {
-    console.error('MAX_CONCURRENT_STREAMS must be a positive integer');
+  if (isNaN(config.maxConcurrentStreams) || config.maxConcurrentStreams < 1 || config.maxConcurrentStreams > 20) {
+    console.error('MAX_CONCURRENT_STREAMS must be a positive integer between 1 and 20');
     process.exit(1);
   }
 
-  if (isNaN(config.syncIntervalMin) || config.syncIntervalMin < 1) {
-    console.error('SYNC_INTERVAL_MIN must be a positive integer');
+  if (isNaN(config.syncIntervalMin) || config.syncIntervalMin < 1 || config.syncIntervalMin > 1440) {
+    console.error('SYNC_INTERVAL_MIN must be a positive integer between 1 and 1440 (24 hours)');
     process.exit(1);
   }
 

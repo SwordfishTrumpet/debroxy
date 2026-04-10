@@ -28,7 +28,7 @@ export function noCache(req, res, next) {
  */
 export function asyncHandler(fn) {
   return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    return Promise.resolve().then(() => fn(req, res, next)).catch(next);
   };
 }
 
@@ -52,7 +52,11 @@ export function validateTypeParam(req, res, next) {
  * @param {Function} next - Next middleware
  */
 export function validateImdbIdParam(req, res, next) {
-  const baseId = extractBaseId(req.params.id);
+  const id = req.params.id;
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json(createErrorResponse(400, 'Invalid IMDB ID format', ErrorCode.VALIDATION_ERROR));
+  }
+  const baseId = extractBaseId(id);
   if (!validateImdbId(baseId)) {
     return res.status(400).json(createErrorResponse(400, 'Invalid IMDB ID format', ErrorCode.VALIDATION_ERROR));
   }

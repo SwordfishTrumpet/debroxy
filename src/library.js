@@ -12,10 +12,17 @@ import * as rd from './realdebrid.js';
 import * as parser from './parser.js';
 import * as settings from './settings.js';
 import { createLogger } from './logger.js';
-import { 
-  CINEMETA_BASE_URL, 
-  CINEMETA_TIMEOUT_MS, 
+import {
+  CINEMETA_BASE_URL,
+  CINEMETA_TIMEOUT_MS,
   CINEMETA_CONCURRENCY,
+  CINEMETA_MAX_RETRIES,
+  CINEMETA_QUEUE_SIZE,
+  CINEMETA_CACHE_MAX,
+  CINEMETA_CACHE_TTL_MS,
+  INCREMENTAL_BATCH_SIZE,
+  MAX_SYNC_ITERATIONS,
+  MIN_CINEMETA_SCORE,
   RD_PAGE_SIZE,
   RD_INITIAL_OFFSET,
   INITIAL_RETRY_DELAY_MS,
@@ -30,20 +37,17 @@ let isSyncing = false;
 // Cinemeta request queue with concurrency limit
 const cinemetaQueue = new PQueue({ concurrency: CINEMETA_CONCURRENCY });
 
-// Cinemeta search results cache (max 1000 entries, TTL 24 hours)
+// Cinemeta search results cache (max CINEMETA_CACHE_MAX entries, TTL 24 hours)
 const cinemetaCache = new LRUCache({
-  max: 1000,
-  ttl: 24 * 60 * 60 * 1000, // 24 hours
+  max: CINEMETA_CACHE_MAX,
+  ttl: CINEMETA_CACHE_TTL_MS, // 24 hours
 });
 
 /** Maximum queue size for Cinemeta requests to prevent OOM */
-const CINEMETA_QUEUE_SIZE = parseInt(process.env.CINEMETA_QUEUE_SIZE || '1000', 10);
 
 /** Maximum sync loop iterations to prevent infinite loops */
-const MAX_SYNC_ITERATIONS = parseInt(process.env.MAX_SYNC_ITERATIONS || '10000', 10);
 
 /** Batch size for incremental sync processing */
-const INCREMENTAL_BATCH_SIZE = parseInt(process.env.INCREMENTAL_BATCH_SIZE || '50', 10);
 
 /**
  * Wrapper function to enforce queue size limit with backpressure
@@ -60,10 +64,8 @@ async function enqueueCinemetaRequest(fn, priority = 0) {
 }
 
 /** Maximum retries for Cinemeta rate limiting */
-const CINEMETA_MAX_RETRIES = parseInt(process.env.CINEMETA_MAX_RETRIES || '3', 10);
 
 /** Minimum Cinemeta match score to accept (0.0 - 1.0) */
-const MIN_CINEMETA_SCORE = 0.4;
 
 /**
  * Search Cinemeta for a title (with caching)

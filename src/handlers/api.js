@@ -10,7 +10,6 @@ import * as library from '../library.js';
 import * as settings from '../settings.js';
 import * as stremio from '../stremio.js';
 import * as validators from '../validators.js';
-import config from '../config.js';
 import { ErrorCode, createErrorResponse } from '../errors.js';
 
 // Progress report debounce map (in-memory, per-process)
