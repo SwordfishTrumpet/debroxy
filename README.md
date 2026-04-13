@@ -4,6 +4,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
+[![Node.js](https://img.shields.io/badge/node-20+-green.svg)](https://nodejs.org/)
+[![Tests](https://img.shields.io/badge/tests-378%20passing-brightgreen.svg)](./test/)
+[![GitHub issues](https://img.shields.io/github/issues/SwordfishTrumpet/debroxy.svg)](https://github.com/SwordfishTrumpet/debroxy/issues)
 
 ---
 
@@ -290,6 +293,16 @@ Debroxy automatically uses Real-Debrid's built-in transcoding when available. If
 | Buffering on fast connections | Enable transcoding (default). Check logs for "HLS manifest" messages. Disable with `TRANSCODING_ENABLED=false` if issues persist. |
 
 **Full troubleshooting:** See [FAQ.md](FAQ.md#troubleshooting)
+
+---
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Setting up your development environment
+- Coding standards (ES modules, testing)
+- Adding features or fixing bugs
+- Writing documentation
 
 ---
 
